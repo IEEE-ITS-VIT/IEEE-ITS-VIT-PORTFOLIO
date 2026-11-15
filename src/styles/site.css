@@ -742,3 +742,32 @@ img, video { max-width: 100%; }
   .work-cta-visual { order: -1; }
   .work-cta-stack { width: min(100%, 300px); }
 }
+
+/* PDF viewer (resources, /view, and any PDF link on the site) */
+.pdfv { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+.pdfv-bar { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; padding: 8px 12px; border-bottom: 1px solid var(--line); font-size: .85rem; min-height: 56px; box-sizing: border-box; }
+.pdfv-name { font-weight: 600; flex: 1 1 160px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pdfv-nav, .pdfv-actions { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pdfv-nav span { font-variant-numeric: tabular-nums; min-width: 4.5em; text-align: center; }
+.pdfv-sep { width: 1px; height: 18px; background: var(--line); min-width: 0 !important; margin: 0 4px; }
+.pdfv-bar button, .pdfv-bar a { font: inherit; color: var(--text); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px; cursor: pointer; text-decoration: none; line-height: 1.2; min-height: 32px; display: inline-flex; align-items: center; }
+.pdfv-bar button:hover:not(:disabled), .pdfv-bar a:hover { border-color: var(--accent); color: var(--accent); }
+.pdfv-bar button:disabled { opacity: .4; cursor: default; }
+.pdfv-zoom { min-width: 4.2em; justify-content: center; }
+.pdfv-close { border-color: var(--accent) !important; }
+.pdfv-scroll { position: relative; overflow: auto; overflow-anchor: none; background: #2a2d33; padding: 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.pdfv-page { background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.35); flex: none; margin: 0 auto; }
+.pdfv-page canvas { display: block; }
+.pdfv-msg { margin: auto; color: #e8e8ea; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; padding: 40px 16px; }
+.pdfv-spin { width: 22px; height: 22px; border: 3px solid rgba(255,255,255,.25); border-top-color: var(--accent); border-radius: 50%; animation: pdfv-spin .8s linear infinite; }
+@keyframes pdfv-spin { to { transform: rotate(360deg); } }
+.pdfv-modal { position: fixed; inset: 0; z-index: 2000; background: var(--bg); display: flex; flex-direction: column; }
+.pdfv-modal .pdfv { border: 0; border-radius: 0; height: 100%; }
+.pdfv.fill { height: 100%; }
+.pdfv.fill .pdfv-scroll { flex: 1; min-height: 0; }
+.pdfv-pagewrap { padding-top: clamp(110px, 14vw, 150px); }
+@media (max-width: 600px) {
+  .pdfv-bar { padding: 8px; gap: 8px; }
+  .pdfv-name { flex-basis: 100%; }
+  .pdfv-scroll { padding: 8px; }
+}

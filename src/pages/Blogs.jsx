@@ -93,10 +93,11 @@ export default function Blogs() {
                         <div className="grid g-2">
                             {mags.map(m => (
                                 <div key={m.id} className="boxed form" style={{ gap: 10 }}>
+                                    {m.image && (m.url ? <SmartLink to={m.url} data-title={m.title} aria-label={`Read ${m.title}`}><Img src={m.image} alt={`${m.title} cover`} ratio="4x3" width={700} /></SmartLink> : <Img src={m.image} alt={`${m.title} cover`} ratio="4x3" width={700} />)}
                                     <span className="label">{m.edition}</span>
                                     <h3 className="display h-sm">{m.title}</h3>
                                     <p className="muted" style={{ margin: 0 }}>{m.desc}</p>
-                                    {m.url ? <SmartLink to={m.url} className="link-arrow" style={{ alignSelf: 'flex-start' }}>Read →</SmartLink> : <span className="chip" style={{ alignSelf: 'flex-start' }}>{cfg.magazineCtaLabel}</span>}
+                                    {m.url ? <SmartLink to={m.url} data-title={m.title} className="link-arrow" style={{ alignSelf: 'flex-start' }}>Read →</SmartLink> : <span className="chip" style={{ alignSelf: 'flex-start' }}>{cfg.magazineCtaLabel}</span>}
                                 </div>
                             ))}
                         </div>

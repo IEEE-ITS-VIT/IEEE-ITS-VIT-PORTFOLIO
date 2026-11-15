@@ -8,6 +8,7 @@ import ProfileGate from '../components/ProfileGate'
 import Seo from '../components/Seo'
 import Section from '../components/Section'
 import { Reveal } from '../components/Reveal'
+import LinkedText from '../components/LinkedText'
 
 const STATUS = {
     applied: ['Applied', ''], test_submitted: ['Test submitted', ''], interview: ['Shortlisted for interview', 'on'],
@@ -85,7 +86,7 @@ export default function Recruitment() {
                                         <h3 className="display h-sm">{d.title}</h3>
                                         {a ? <span className={`chip ${tone}`}>{label}</span> : !d.accepting && <span className="chip">Closed</span>}
                                     </div>
-                                    {d.description && <p className="muted" style={{ margin: 0, whiteSpace: 'pre-line' }}>{d.description}</p>}
+                                    {d.description && <LinkedText as="p" className="muted" style={{ margin: 0, whiteSpace: 'pre-line', overflowWrap: 'anywhere' }} text={d.description} />}
                                     <ul className="rec-facts">
                                         {d.apply_deadline && <li><span>Apply by</span>{fmtIst(d.apply_deadline)}</li>}
                                         {d.test && <li><span>Online test</span>{d.test.questions} questions · {d.test.minutes} min{d.test.deadline ? ` · due ${fmtIst(d.test.deadline)}` : ''}</li>}

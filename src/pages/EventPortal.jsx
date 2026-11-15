@@ -8,6 +8,7 @@ import ProfileGate from '../components/ProfileGate'
 import Seo from '../components/Seo'
 import Section from '../components/Section'
 import Img from '../components/Img'
+import LinkedText from '../components/LinkedText'
 
 const past = iso => !!iso && Date.parse(iso) < Date.now()
 
@@ -102,7 +103,7 @@ export default function EventPortal() {
                                 </ol>
                             </div>
                         )}
-                        {p.details && <div className="boxed" style={{ whiteSpace: 'pre-line' }}>{p.details}</div>}
+                        {p.details && <LinkedText as="div" className="boxed" style={{ whiteSpace: 'pre-line', overflowWrap: 'anywhere' }} text={p.details} />}
 
                         {!user && (
                             <div className="boxed form">

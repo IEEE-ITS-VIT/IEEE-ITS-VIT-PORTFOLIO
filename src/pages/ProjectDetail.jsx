@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useSite } from '../context/SiteContext'
 import { sanitizeHtml } from '../lib/safe'
@@ -7,6 +8,7 @@ import Section from '../components/Section'
 import Img from '../components/Img'
 import { itemSlug, fileType } from '../lib/items'
 
+const PdfViewer = lazy(() => import('../components/PdfViewer'))
 const officeViewer = u => `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(u)}`
 
 /** /projects/:slug — a short write-up with the architecture diagram and links. */
@@ -57,7 +59,7 @@ export function ResourceDetail() {
     const r = list('resources').find(x => itemSlug(x) === slug)
     if (!r) return <PageHeader title={ready ? 'Resource not found' : 'Loading'} overline="Resources"><Link className="btn" to="/projects?tab=resources" style={{ marginTop: 20 }}>All resources</Link></PageHeader>
     const type = fileType(r.file)
-    const viewer = !r.file ? null : type === 'PDF' ? r.file : ['DOC', 'DOCX', 'PPT', 'PPTX', 'XLS', 'XLSX'].includes(type) ? officeViewer(r.file) : null
+    const viewer = !r.file || type === 'PDF' ? null : ['DOC', 'DOCX', 'PPT', 'PPTX', 'XLS', 'XLSX'].includes(type) ? officeViewer(r.file) : null
     const jsonLd = { '@context': 'https://schema.org', '@type': 'LearningResource', name: r.title, description: r.summary, learningResourceType: r.category,
         keywords: r.tags?.join(', ') || undefined, url: window.location.href, provider: { '@type': 'Organization', name: settings.site?.name } }
     return (
@@ -65,7 +67,7 @@ export function ResourceDetail() {
             <Seo title={r.title} description={r.summary} image={r.image} type="article" jsonLd={jsonLd} />
             <PageHeader title={r.title} overline={`Resources / ${r.category || 'Resource'}`} subtitle={r.summary} wide>
                 <div className="hero-cta">
-                    {r.file && <a className="btn solid" href={r.file} target="_blank" rel="noreferrer">Open {type || 'document'} in a new tab <span className="arr">→</span></a>}
+                    {r.file && <a className="btn solid" href={r.file} target="_blank" rel="noreferrer" data-no-viewer>Open {type || 'document'} in a new tab <span className="arr">→</span></a>}
                     {r.file && <a className="btn" href={r.file} download>Download</a>}
                     {r.link && <a className="btn" href={r.link} target="_blank" rel="noreferrer">Related link ↗</a>}
                     <Link className="btn" to="/projects?tab=resources">All resources</Link>
@@ -75,7 +77,8 @@ export function ResourceDetail() {
                 <div className="wrap form" style={{ gap: 32 }}>
                     {r.tags?.length > 0 && <ul className="pr-tags">{r.tags.map(t => <li key={t}>{t}</li>)}</ul>}
                     {r.body && <div className="prose" dangerouslySetInnerHTML={{ __html: sanitizeHtml(r.body) }} />}
-                    {viewer ? <iframe className="pr-viewer" src={viewer} title={`${r.title} document`} loading="lazy" />
+                    {type === 'PDF' ? <Suspense fallback={<p className="notice">Loading the document…</p>}><PdfViewer url={r.file} title={r.title} height="min(80svh, 900px)" /></Suspense>
+                        : viewer ? <iframe className="pr-viewer" src={viewer} title={`${r.title} document`} loading="lazy" />
                         : !r.file ? <p className="notice">The document for this resource is being prepared and will appear here soon.</p>
                             : <p className="notice">This file can't be previewed here — use <b>Open</b> or <b>Download</b> above.</p>}
                 </div>

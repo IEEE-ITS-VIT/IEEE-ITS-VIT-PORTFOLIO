@@ -14,6 +14,7 @@ import AnnouncementBar from './components/AnnouncementBar'
 import SitePopup from './components/SitePopup'
 import PageHeader from './components/PageHeader'
 import Seo from './components/Seo'
+import PdfLinks from './components/PdfLinks'
 import Home from './pages/Home'
 import Blogs from './pages/Blogs'
 import FAQ from './pages/FAQ'
@@ -39,6 +40,7 @@ const AdminApp = lazy(() => import('./admin/AdminApp'))
 const Recruitment = lazy(() => import('./pages/Recruitment'))
 const RecruitmentTest = lazy(() => import('./pages/RecruitmentTest'))
 const EventPortal = lazy(() => import('./pages/EventPortal'))
+const ViewPdf = lazy(() => import('./pages/ViewPdf'))
 const PortalJudge = lazy(() => import('./pages/PortalJudge'))
 const Lazy = ({ children }) => <Suspense fallback={<div className="wrap" style={{ padding: '120px 0' }}><div className="skeleton" style={{ height: 300 }} /></div>}>{children}</Suspense>
 
@@ -97,6 +99,7 @@ function App() {
       {ready && (
         <>
           <ScrollToTop />
+          <PdfLinks />
           {PREVIEW && <PreviewBridge />}
           <ScrollProgress />
           {!focusMode && <><AnnouncementBar /><Navbar /><SitePopup /></>}
@@ -128,6 +131,7 @@ function App() {
                 <Route path="/recruitment/test/:domainId" element={<Lazy><RecruitmentTest /></Lazy>} />
                 <Route path="/e/:slug" element={<Lazy><EventPortal /></Lazy>} />
                 <Route path="/e/:slug/judge" element={<Lazy><PortalJudge /></Lazy>} />
+                <Route path="/view" element={<Lazy><ViewPdf /></Lazy>} />
                 <Route path="/quanta-26" element={<EventDetail slug="quanta-26" />} />
                 <Route path="/qunata-26" element={<EventDetail slug="quanta-26" />} />
                 <Route path="*" element={<NotFound />} />

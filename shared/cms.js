@@ -184,12 +184,13 @@ export const CONTENT_TYPES = {
         ],
     },
     magazines: {
-        label: 'Magazines', singular: 'Magazine', group: 'Publications', title: 'title',
+        label: 'Magazines', singular: 'Magazine', group: 'Publications', title: 'title', image: 'image',
         fields: [
             { name: 'title', label: 'Title', type: 'text', required: true },
             { name: 'edition', label: 'Edition', type: 'text' },
             { name: 'desc', label: 'Description', type: 'textarea' },
-            { name: 'url', label: 'Link / PDF', type: 'url' },
+            { name: 'url', label: 'Magazine PDF (upload) or link', type: 'file', help: 'Upload the PDF (stored on ImageKit) or paste a link. PDFs open in the built-in viewer on the site.' },
+            { name: 'image', label: 'Cover image (optional)', type: 'image' },
         ],
     },
     vlogs: {

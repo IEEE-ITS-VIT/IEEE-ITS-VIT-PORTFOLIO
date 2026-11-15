@@ -133,21 +133,39 @@ const IK_URL = /https:\/\/ik\.imagekit\.io\/[^"'\s\\)<>]+/g
 const imageUrls = (...values) => new Set(values.flatMap(v => String(typeof v === 'string' ? v : JSON.stringify(v ?? '')).match(IK_URL) || []))
 const dropped = (before, after) => [...before].filter(u => !after.has(u))
 
-async function imageUsage(url) {
+/** Public page where each kind of content appears (for "Used in" links in the Media Library). */
+const CONTENT_PAGE = {
+    banners: () => '/', popups: () => '/', announcements: () => '/', gallery: () => '/', domains: () => '/', board: () => '/',
+    faculty: () => '/faculty', web_team: () => '/web-team', advisory: () => '/advisory-board', vlogs: () => '/vlogs', faqs: () => '/faq', merch: () => '/merch',
+    magazines: () => '/blogs', blogs: d => `/blogs/${d.slug || slugify(d.title)}`,
+    projects: d => `/projects/${d.slug || slugify(d.title)}`, resources: d => `/resources/${d.slug || slugify(d.title)}`,
+}
+
+/** Everywhere an uploaded file (image or document) is used: a label, where to edit it and the public page. */
+async function mediaUsage(url) {
     const db = getDb()
-    const [content, events, moments, settings] = await Promise.all([
-        db.all('SELECT type, data FROM content WHERE instr(data, ?) > 0', [url]),
-        db.all('SELECT title FROM events WHERE instr(poster_url, ?) > 0 OR instr(extra, ?) > 0 OR instr(body_html, ?) > 0', [url, url, url]),
-        db.all('SELECT title FROM moments WHERE instr(photos, ?) > 0', [url]),
+    const [content, events, moments, settings, portals, domains] = await Promise.all([
+        db.all('SELECT id, type, data FROM content WHERE instr(data, ?) > 0', [url]),
+        db.all('SELECT id, slug, title FROM events WHERE instr(poster_url, ?) > 0 OR instr(extra, ?) > 0 OR instr(body_html, ?) > 0', [url, url, url]),
+        db.all('SELECT id, title FROM moments WHERE instr(photos, ?) > 0', [url]),
         db.all("SELECT key FROM settings WHERE key != 'image_styles' AND instr(value, ?) > 0", [url]),
+        db.all('SELECT id, slug, title FROM ev_portals WHERE instr(config, ?) > 0', [url]).catch(() => []),
+        db.all('SELECT id, title FROM rec_domains WHERE instr(description, ?) > 0 OR instr(questions, ?) > 0', [url, url]).catch(() => []),
     ])
     return [
-        ...content.map(r => { const t = CONTENT_TYPES[r.type]; const d = parseJson(r.data, {}); return `${t?.label || r.type}: ${d[t?.title] || 'item'}` }),
-        ...events.map(r => `Event: ${r.title}`),
-        ...moments.map(r => `Album: ${r.title}`),
-        ...settings.map(r => `Settings: ${SETTINGS_FORMS[r.key]?.label || r.key}`),
+        ...content.map(r => {
+            const t = CONTENT_TYPES[r.type]
+            const d = parseJson(r.data, {})
+            return { label: `${t?.label || r.type}: ${d[t?.title] || 'item'}`, admin: `/admin/c/${r.type}`, page: CONTENT_PAGE[r.type]?.(d) || null }
+        }),
+        ...events.map(r => ({ label: `Event: ${r.title}`, admin: '/admin/events', page: `/events/${r.slug}` })),
+        ...moments.map(r => ({ label: `Album: ${r.title}`, admin: '/admin/moments', page: '/moments' })),
+        ...settings.map(r => ({ label: `Settings: ${SETTINGS_FORMS[r.key]?.label || r.key}`, admin: `/admin/s/${r.key}`, page: null })),
+        ...portals.map(r => ({ label: `Event portal: ${r.title}`, admin: `/admin/portals/${r.id}`, page: `/e/${r.slug}` })),
+        ...domains.map(r => ({ label: `Recruitment domain: ${r.title}`, admin: '/admin/recruitment', page: '/recruitment' })),
     ]
 }
+const imageUsage = async url => (await mediaUsage(url)).map(u => u.label)
 
 async function releaseImages(user, urls) {
     const db = getDb()
@@ -733,6 +751,14 @@ route('GET', '/api/admin/media/auth', async ({ user, res }) => {
 route('GET', '/api/admin/media', async ({ user }) => {
     requireRole(user, 'editor')
     return { items: await getDb().all('SELECT * FROM media ORDER BY id DESC LIMIT 500'), imagekit: imagekitConfigured() }
+})
+
+/* Details for one file in the Media Library: where it is used (with edit and page links) and who uploaded it. */
+route('GET', '/api/admin/media/:id/usage', async ({ user, params }) => {
+    requireRole(user, 'editor')
+    const m = await getDb().first('SELECT m.*, u.name AS uploader FROM media m LEFT JOIN users u ON u.id = m.uploaded_by WHERE m.id = ?', [Number(params.id)])
+    if (!m) fail(404, 'File not found')
+    return { item: m, usedIn: await mediaUsage(m.url) }
 })
 
 route('POST', '/api/admin/media', async ({ user, body }) => {
