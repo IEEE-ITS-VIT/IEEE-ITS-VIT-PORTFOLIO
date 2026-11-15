@@ -579,7 +579,7 @@ route('DELETE', '/api/admin/content/:type/:id', async ({ user, params }) => {
  * subscribers, and/or custom addresses (separated by spaces, commas or new lines), de-duplicated.
  * Queued in the Outbox so large lists go out within the daily email limit.
  */
-const ANNOUNCE_TYPES = ['blogs', 'magazines']
+const ANNOUNCE_TYPES = ['blogs', 'magazines', 'connect']
 route('GET', '/api/admin/announce/audience', async ({ user }) => {
     requireRole(user, 'editor')
     const db = getDb()
@@ -592,17 +592,35 @@ route('GET', '/api/admin/announce/audience', async ({ user }) => {
 
 route('POST', '/api/admin/announce', async ({ req, user, body }) => {
     requireRole(user, 'editor')
-    if (!ANNOUNCE_TYPES.includes(body.type)) fail(400, 'Only blog posts and magazines can be emailed.')
+    if (!ANNOUNCE_TYPES.includes(body.type)) fail(400, 'Only blog posts, magazines and Connect posts can be emailed.')
     const db = getDb()
-    const row = await db.first("SELECT data FROM content WHERE id = ? AND type = ?", [Number(body.id), body.type])
-    if (!row) fail(404, 'Item not found.')
-    const d = parseJson(row.data, {})
     const { site } = await loadSettings(['site'])
     const base = (site.url || `https://${req.headers['x-forwarded-host'] || req.headers.host}`).replace(/\/$/, '')
-    const isPdf = /\.pdf(?:[?#]|$)/i.test(d.url || '') && /^https:\/\/ik\.imagekit\.io\//.test(d.url || '')
-    const link = body.type === 'blogs' ? `${base}/blogs/${d.slug || slugify(d.title)}`
-        : isPdf ? `${base}/view?file=${encodeURIComponent(d.url)}&title=${encodeURIComponent(d.title || 'Magazine')}`
-            : d.url ? (/^https?:/.test(d.url) ? d.url : `${base}${d.url}`) : `${base}/blogs`
+    let d, link, extra = {}
+    if (body.type === 'connect') {
+        // Published Connect posts: the chosen ones, or everything published in the last 7 days.
+        const ids = [...new Set((Array.isArray(body.ids) ? body.ids : []).map(Number).filter(Boolean))].slice(0, 90)
+        const posts = ids.length
+            ? await db.all(`SELECT title, company, year FROM connect_posts WHERE status = 'approved' AND id IN (${ids.map(() => '?').join(',')}) ORDER BY reviewed_at DESC`, ids)
+            : await db.all("SELECT title, company, year FROM connect_posts WHERE status = 'approved' AND reviewed_at > datetime('now', '-7 days') ORDER BY reviewed_at DESC LIMIT 50")
+        if (!posts.length) fail(400, ids.length ? 'None of those posts are published yet — publish them first.' : 'Nothing was published on Connect in the last 7 days.')
+        const shown = posts.slice(0, 15)
+        d = { title: `${posts.length} new on Connect` }
+        link = `${base}/connect`
+        extra = {
+            count: String(posts.length),
+            list: shown.map(p => `• ${p.company ? `${p.company}${p.year ? ` (${p.year})` : ''} — ` : ''}${p.title}`).join('\n') + (posts.length > shown.length ? `\n…and ${posts.length - shown.length} more` : ''),
+            companies: [...new Set(posts.map(p => p.company).filter(Boolean))].slice(0, 8).join(', '),
+        }
+    } else {
+        const row = await db.first("SELECT data FROM content WHERE id = ? AND type = ?", [Number(body.id), body.type])
+        if (!row) fail(404, 'Item not found.')
+        d = parseJson(row.data, {})
+        const isPdf = /\.pdf(?:[?#]|$)/i.test(d.url || '') && /^https:\/\/ik\.imagekit\.io\//.test(d.url || '')
+        link = body.type === 'blogs' ? `${base}/blogs/${d.slug || slugify(d.title)}`
+            : isPdf ? `${base}/view?file=${encodeURIComponent(d.url)}&title=${encodeURIComponent(d.title || 'Magazine')}`
+                : d.url ? (/^https?:/.test(d.url) ? d.url : `${base}${d.url}`) : `${base}/blogs`
+    }
 
     const people = new Map() // email -> name
     const add = (email, name = '') => { const e = String(email || '').trim().toLowerCase(); if (isEmail(e) && !people.has(e)) people.set(e, name) }
@@ -618,11 +636,11 @@ route('POST', '/api/admin/announce', async ({ req, user, body }) => {
     const subject = str(body.subject, 300)
     const text = str(body.body, 10_000)
     if (!subject || !text) fail(400, 'Write a subject and a message.')
-    const vars = { title: d.title || '', summary: d.desc || '', edition: d.edition || '', readTime: d.readTime || '', link, site: site.name || 'IEEE ITS VIT' }
+    const vars = { title: d.title || '', summary: d.desc || '', edition: d.edition || '', readTime: d.readTime || '', link, site: site.name || 'IEEE ITS VIT', ...extra }
     const recipients = [...people].map(([email, name]) => ({ email, vars: { ...vars, name: String(name || '').split(' ')[0] || 'there' } }))
-    const label = `${body.type === 'blogs' ? 'New blog' : 'Newsletter'}: ${d.title || 'item'} (${recipients.length})`
+    const label = `${body.type === 'blogs' ? 'New blog' : body.type === 'connect' ? 'Connect' : 'Newsletter'}: ${d.title || 'item'} (${recipients.length})`
     const queued = await createCampaign({ kind: `announce-${body.type}`, label, subject, body: text, recipients, user })
-    await audit(user, 'email', body.type, body.id, `${label} — ${aud.join(' + ') || 'custom'}${custom.length ? ` + ${custom.length} custom` : ''}`)
+    await audit(user, 'email', body.type, body.id || (body.ids || []).join(',') || 'last-7-days', `${label} — ${aud.join(' + ') || 'custom'}${custom.length ? ` + ${custom.length} custom` : ''}`)
     return { queued: [queued] }
 })
 

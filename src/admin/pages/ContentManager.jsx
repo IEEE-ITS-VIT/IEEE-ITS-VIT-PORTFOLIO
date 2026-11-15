@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { Reorder, useDragControls } from 'framer-motion'
 import { api } from '../../lib/api'
 import { useSite } from '../../context/SiteContext'
 import { CONTENT_TYPES, slugify } from '../../../shared/cms.js'
 import { FieldForm, thumb } from '../fields'
-import { Drawer, Modal, PageTitle, Badge, Empty, Spinner, useToast, useConfirm, useLoader, Switch, queuedText } from '../ui'
+import { Drawer, PageTitle, Badge, Empty, Spinner, useToast, useConfirm, useLoader, Switch } from '../ui'
+import { ANNOUNCE, AnnounceModal } from '../Announce'
 import { PreviewFrame, withItem } from '../Preview'
 import Icon from '../icons'
 
@@ -20,70 +21,6 @@ const PREVIEW_FOCUS = {
     web_team: 'webteam.list', faqs: 'faq.list', merch: 'merch.list', vlogs: 'vlogs.list', footer_links: 'footer', social_links: 'footer',
 }
 const previewPath = (type, data) => { const p = PREVIEW_PATH[type]; return typeof p === 'function' ? p(data) : p || '/' }
-
-/* Default wording for "new post / new issue" emails (editable before sending). */
-const ANNOUNCE = {
-    blogs: {
-        subject: 'New on the IEEE ITS VIT blog: {{title}}',
-        body: 'Hi {{name}},\n\nWe just published a new article on the IEEE ITS VIT blog:\n\n{{title}}\n{{summary}}\n\nRead it here ({{readTime}}):\n{{link}}\n\nIEEE ITS VIT',
-    },
-    magazines: {
-        subject: 'The new {{title}} is out — check it out',
-        body: 'Hi {{name}},\n\nThe latest edition of {{title}} {{edition}} is out.\n\n{{summary}}\n\nCheck it out here:\n{{link}}\n\nIEEE ITS VIT',
-    },
-}
-
-/** Email a blog post / magazine issue to all users, newsletter subscribers and/or typed-in addresses. */
-function AnnounceModal({ type, item, onClose }) {
-    const toast = useToast()
-    const navigate = useNavigate()
-    const [aud, setAud] = useState({ users: true, subscribers: true })
-    const [custom, setCustom] = useState('')
-    const [subject, setSubject] = useState(ANNOUNCE[type].subject)
-    const [body, setBody] = useState(ANNOUNCE[type].body)
-    const [counts, setCounts] = useState(null)
-    const [busy, setBusy] = useState(false)
-    useEffect(() => { api.get('/admin/announce/audience').then(setCounts).catch(() => {}) }, [])
-    const typed = custom.split(/[\s,;]+/).filter(Boolean)
-    const badTyped = typed.filter(e => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))
-    const upTo = (aud.users ? counts?.users || 0 : 0) + (aud.subscribers ? counts?.subscribers || 0 : 0) + typed.length
-    const send = async () => {
-        setBusy(true)
-        try {
-            const r = await api.post('/admin/announce', { type, id: item.id, audiences: Object.keys(aud).filter(k => aud[k]), custom, subject, body })
-            toast(queuedText(r.queued)); navigate('/admin/outbox')
-        } catch (e) { toast(e.message, 'error') }
-        setBusy(false)
-    }
-    const fill = t => t.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => ({ name: 'Aditi', title: item.title || '', summary: item.desc || '', edition: item.edition || '', readTime: item.readTime || '2 min read', link: '(link to the ' + (type === 'blogs' ? 'article' : 'magazine') + ')' }[k] ?? ''))
-    return (
-        <Modal open onClose={onClose} title={`Email “${item.title || 'this'}” to readers`} wide>
-            <div className="adm-form">
-                {item._status !== 'published' && <p className="adm-hint warn">This item is a draft — publish it first, otherwise the link in the email will not open.</p>}
-                <div className="adm-field"><span>Send to</span>
-                    <div className="adm-row wrap">
-                        <label className="adm-chipcheck"><input type="checkbox" checked={aud.users} onChange={e => setAud(a => ({ ...a, users: e.target.checked }))} />All registered users{counts ? ` (${counts.users})` : ''}</label>
-                        <label className="adm-chipcheck"><input type="checkbox" checked={aud.subscribers} onChange={e => setAud(a => ({ ...a, subscribers: e.target.checked }))} />Newsletter subscribers{counts ? ` (${counts.subscribers})` : ''}</label>
-                    </div>
-                </div>
-                <label className="adm-field"><span>Custom emails — separated by spaces, commas or new lines ({typed.length})</span>
-                    <textarea className="adm-input mono" rows={3} value={custom} onChange={e => setCustom(e.target.value)} placeholder="friend@vitstudent.ac.in faculty@vit.ac.in" />
-                    {badTyped.length > 0 && <small className="adm-err">Not valid: {badTyped.slice(0, 5).join(', ')}</small>}
-                </label>
-                <label className="adm-field"><span>Subject</span><input className="adm-input" value={subject} onChange={e => setSubject(e.target.value)} /></label>
-                <label className="adm-field"><span>Message</span><textarea className="adm-input" rows={9} value={body} onChange={e => setBody(e.target.value)} /></label>
-                <p className="adm-hint" style={{ margin: 0 }}>Placeholders: {'{{name}} {{title}} {{summary}} {{edition}} {{readTime}} {{link}}'}. {type === 'magazines' ? '{{link}} opens the PDF in the website\'s viewer.' : '{{link}} opens the article.'} Everyone gets their own email; people in more than one list get it once. Large lists go out within the daily email limit.</p>
-                <details><summary className="adm-hint" style={{ cursor: 'pointer' }}>Preview</summary>
-                    <div className="adm-panel" style={{ whiteSpace: 'pre-wrap', marginTop: 8 }}><b>{fill(subject)}</b>{'\n\n'}{fill(body)}</div>
-                </details>
-                <div className="adm-row end">
-                    <button type="button" className="adm-btn ghost" onClick={onClose}>Cancel</button>
-                    <button type="button" className="adm-btn primary" disabled={busy || !upTo || badTyped.length > 0 || !subject.trim()} onClick={send}><Icon name="send" size={16} /> Queue {upTo ? `up to ${upTo}` : ''} emails</button>
-                </div>
-            </div>
-        </Modal>
-    )
-}
 
 const toLocalInput = v => (v ? String(v).replace(' ', 'T').slice(0, 16) : '')
 
@@ -228,7 +165,8 @@ export default function ContentManager({ type }) {
                 </Reorder.Group>
             )}
             <p className="adm-hint">Drag the handle to reorder — the website follows this order.{ANNOUNCE[type] ? ' Use Email to tell users and newsletter subscribers about a new ' + (type === 'blogs' ? 'post.' : 'issue.') : ''}</p>
-            {announcing && <AnnounceModal type={type} item={announcing} onClose={() => setAnnouncing(null)} />}
+            {announcing && <AnnounceModal type={type} payload={{ id: announcing.id }} heading={`Email “${announcing.title || 'this'}” to readers`} draft={announcing._status !== 'published'}
+                vars={{ title: announcing.title || '', summary: announcing.desc || '', edition: announcing.edition || '', readTime: announcing.readTime || '2 min read' }} onClose={() => setAnnouncing(null)} />}
 
             <Drawer open={!!editing} title={`${editing?.id ? 'Edit' : 'New'} ${def.singular}`} onClose={() => setEditing(null)}
                 preview={editing && <PreviewFrame path={path} patch={patch} focus={PREVIEW_FOCUS[type]} />}

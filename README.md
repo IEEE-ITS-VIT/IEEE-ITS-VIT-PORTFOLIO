@@ -103,6 +103,9 @@ SEO — is edited at **`/admin`**, and the site also runs the chapter's **recrui
 - **Admin → Publications → Connect:** posts grouped by the week they were sent; publish, reject (with a note the author
   sees), edit, bulk-publish a week, delete, or **add posts by hand** with a credit line. On Mondays the daily cron emails
   the query recipients if posts are waiting (needs `CRON_SECRET`).
+- **Email published questions:** Admin → Connect → *Email new questions* (everything published in the last 7 days),
+  *Email selected*, or *Email* on one published post — same audience choices and editable wording as blog emails
+  ({{count}} {{list}} {{companies}} {{link}}).
 - **Magazines** in the More menu jumps to the magazine section of the Blogs page (`/blogs#magazines`; `/magazines`
   redirects there). Covers show there and PDFs open in the built-in viewer.
 

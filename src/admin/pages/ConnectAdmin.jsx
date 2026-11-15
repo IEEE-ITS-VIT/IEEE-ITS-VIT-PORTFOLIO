@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { api } from '../../lib/api'
 import { Drawer, PageTitle, Badge, Empty, Spinner, Switch, useToast, useConfirm, useLoader, fmtDate } from '../ui'
 import Icon from '../icons'
+import { AnnounceModal } from '../Announce'
 
 const TONE = { pending: 'warn', approved: 'ok', rejected: 'neutral' }
 const TABS = [['pending', 'Waiting for review'], ['approved', 'Published'], ['rejected', 'Rejected'], ['all', 'All']]
@@ -14,6 +15,16 @@ const weekOf = iso => {
     const day = (d.getDay() + 6) % 7
     d.setDate(d.getDate() - day); d.setHours(0, 0, 0, 0)
     return d
+}
+
+/** Preview values for the email: the published posts it would list. */
+function mailVars(items, ids) {
+    const weekAgo = Date.now() - 7 * 864e5
+    const posts = items.filter(p => p.status === 'approved' && (ids?.length ? ids.includes(p.id) : Date.parse(String(p.reviewed_at || p.created_at).replace(' ', 'T') + 'Z') > weekAgo))
+    return {
+        count: String(posts.length), companies: [...new Set(posts.map(p => p.company).filter(Boolean))].join(', '),
+        list: posts.slice(0, 15).map(p => `• ${p.company ? `${p.company}${p.year ? ` (${p.year})` : ''} — ` : ''}${p.title}`).join('\n') || '(no published posts)',
+    }
 }
 
 function Editor({ post, onClose, onSaved }) {
@@ -82,6 +93,7 @@ export default function ConnectAdmin() {
     const [q, setQ] = useState('')
     const [picked, setPicked] = useState([])
     const [editing, setEditing] = useState(null)
+    const [mailing, setMailing] = useState(null) // { ids?: [], vars }
     const items = useMemo(() => data?.items || [], [data])
     const counts = Object.fromEntries(TABS.map(([k]) => [k, k === 'all' ? items.length : items.filter(p => p.status === k).length]))
     const shown = items.filter(p => (tab === 'all' || p.status === tab) && (!q || JSON.stringify(p).toLowerCase().includes(q.toLowerCase())))
@@ -112,6 +124,7 @@ export default function ConnectAdmin() {
             <PageTitle title="Connect" subtitle="Interview questions and topics shared by members. Nothing is public until you publish it. New posts are grouped by the week they were sent; admins get a reminder email on Mondays when posts are waiting.">
                 <input className="adm-input search" placeholder="Search…" value={q} onChange={e => setQ(e.target.value)} />
                 <a className="adm-btn ghost" href="/connect" target="_blank" rel="noreferrer">View page <Icon name="external" size={14} /></a>
+                <button className="adm-btn" onClick={() => setMailing({ vars: mailVars(items) })} title="Email everything published in the last 7 days"><Icon name="send" size={16} /> Email new questions</button>
                 <button className="adm-btn primary" onClick={() => setEditing({})}><Icon name="plus" size={16} /> Add a post</button>
             </PageTitle>
             <div className="adm-tabs">{TABS.map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} onClick={() => { setTab(k); setPicked([]) }}>{l} ({counts[k]})</button>)}</div>
@@ -120,6 +133,7 @@ export default function ConnectAdmin() {
                     <b>{picked.length} selected</b>
                     <button className="adm-btn small primary" onClick={() => review(picked, 'approved')}><Icon name="check" size={14} /> Publish</button>
                     <button className="adm-btn small" onClick={() => review(picked, 'rejected')}>Reject</button>
+                    <button className="adm-btn small" onClick={() => setMailing({ ids: picked, vars: mailVars(items, picked) })} title="Only published posts are included"><Icon name="send" size={14} /> Email selected</button>
                     <button className="adm-btn small ghost" onClick={() => setPicked([])}>Clear</button>
                 </div>
             )}
@@ -143,6 +157,7 @@ export default function ConnectAdmin() {
                                 <div className="adm-row">
                                     {p.status !== 'approved' && <button className="adm-btn small primary" onClick={() => review([p.id], 'approved')}>Publish</button>}
                                     {p.status !== 'rejected' && <button className="adm-btn small ghost" onClick={() => review([p.id], 'rejected')}>{p.status === 'approved' ? 'Unpublish' : 'Reject'}</button>}
+                                    {p.status === 'approved' && <button className="adm-btn small ghost" onClick={() => setMailing({ ids: [p.id], vars: mailVars(items, [p.id]) })} title="Email this question to users"><Icon name="send" size={14} /> Email</button>}
                                     <button className="adm-btn small" onClick={() => setEditing(p)}>Edit</button>
                                     <button className="adm-btn small ghost danger-text" onClick={() => remove(p)} aria-label="Delete"><Icon name="trash" size={14} /></button>
                                 </div>
@@ -151,6 +166,9 @@ export default function ConnectAdmin() {
                     </div>
                 </section>
             ))}
+            {mailing && <AnnounceModal type="connect" payload={mailing.ids ? { ids: mailing.ids } : {}} vars={mailing.vars}
+                heading={mailing.ids ? `Email ${mailing.ids.length} selected post${mailing.ids.length > 1 ? 's' : ''}` : 'Email the questions published in the last 7 days'}
+                draft={!!mailing.ids && mailing.ids.some(id => items.find(p => p.id === id)?.status !== 'approved')} onClose={() => setMailing(null)} />}
             {editing && <Editor post={editing.id ? editing : null} onClose={() => setEditing(null)} onSaved={replace} />}
         </>
     )
