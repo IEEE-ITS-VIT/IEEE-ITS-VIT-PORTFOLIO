@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import { useSite } from '../context/SiteContext'
 import { api } from '../lib/api'
 import { sanitizeHtml, label } from '../lib/safe'
@@ -42,6 +42,17 @@ export default function Blogs() {
     const blogs = list('blogs')
     const mags = list('magazines')
     const cfg = settings.blogs || {}
+    // "Magazines" in the More menu links to /blogs#magazines: scroll there once the page has rendered.
+    const location = useLocation()
+    useEffect(() => {
+        if (slug || location.hash !== '#magazines') return
+        let tries = 0
+        const t = setInterval(() => {
+            const el = document.getElementById('magazines')
+            if (el || ++tries > 20) { clearInterval(t); el?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
+        }, 150)
+        return () => clearInterval(t)
+    }, [slug, location.hash, location.key])
 
     if (slug) {
         const b = blogs.find(x => x.slug === slug)
@@ -87,13 +98,13 @@ export default function Blogs() {
                 </div>
             </Section>
             {cfg.magazineEnabled !== false && (
-                <section className="section">
+                <section className="section" id="magazines" style={{ scrollMarginTop: 90 }}>
                     <div className="wrap">
                         <SectionHead overline={cfg.magazineTag} title={cfg.magazineTitle} text={cfg.magazineText} />
                         <div className="grid g-2">
                             {mags.map(m => (
                                 <div key={m.id} className="boxed form" style={{ gap: 10 }}>
-                                    {m.image && (m.url ? <SmartLink to={m.url} data-title={m.title} aria-label={`Read ${m.title}`}><Img src={m.image} alt={`${m.title} cover`} ratio="4x3" width={700} /></SmartLink> : <Img src={m.image} alt={`${m.title} cover`} ratio="4x3" width={700} />)}
+                                    {m.image && (m.url ? <SmartLink to={m.url} data-title={m.title} aria-label={`Read ${m.title}`}><Img src={m.image} alt={`${m.title} cover`} ratio="16x9" width={900} /></SmartLink> : <Img src={m.image} alt={`${m.title} cover`} ratio="16x9" width={900} />)}
                                     <span className="label">{m.edition}</span>
                                     <h3 className="display h-sm">{m.title}</h3>
                                     <p className="muted" style={{ margin: 0 }}>{m.desc}</p>

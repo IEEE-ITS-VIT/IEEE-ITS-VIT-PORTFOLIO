@@ -779,14 +779,6 @@ img, video { max-width: 100%; }
   .pdfv-scroll { padding: 8px; }
 }
 
-/* Magazines page */
-.mag-grid { gap: clamp(20px, 3vw, 32px); }
-.mag-card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; display: flex; flex-direction: column; }
-.mag-cover { display: block; }
-.mag-cover-blank { display: grid; place-items: center; height: 100%; font-family: var(--font-display, inherit); font-size: 1.4rem; color: var(--muted); padding: 20px; text-align: center; }
-.mag-body { padding: clamp(18px, 3vw, 26px); display: flex; flex-direction: column; gap: 10px; flex: 1; }
-.mag-body p { margin: 0; }
-.mag-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: auto; padding-top: 6px; }
 
 /* Connect page */
 .cx-wrap { display: flex; flex-direction: column; gap: 22px; }
