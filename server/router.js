@@ -573,6 +573,58 @@ route('DELETE', '/api/admin/content/:type/:id', async ({ user, params }) => {
     return { ok: true }
 })
 
+/*
+ * "New blog post / new magazine issue" emails. Audience: every active registered user, newsletter
+ * subscribers, and/or custom addresses (separated by spaces, commas or new lines), de-duplicated.
+ * Queued in the Outbox so large lists go out within the daily email limit.
+ */
+const ANNOUNCE_TYPES = ['blogs', 'magazines']
+route('GET', '/api/admin/announce/audience', async ({ user }) => {
+    requireRole(user, 'editor')
+    const db = getDb()
+    const [u, s] = await Promise.all([
+        db.first("SELECT COUNT(*) n FROM users WHERE active = 1 AND password_hash != 'invited'"),
+        db.first("SELECT COUNT(*) n FROM subscribers WHERE list = 'newsletter'"),
+    ])
+    return { users: u.n, subscribers: s.n }
+})
+
+route('POST', '/api/admin/announce', async ({ req, user, body }) => {
+    requireRole(user, 'editor')
+    if (!ANNOUNCE_TYPES.includes(body.type)) fail(400, 'Only blog posts and magazines can be emailed.')
+    const db = getDb()
+    const row = await db.first("SELECT data FROM content WHERE id = ? AND type = ?", [Number(body.id), body.type])
+    if (!row) fail(404, 'Item not found.')
+    const d = parseJson(row.data, {})
+    const { site } = await loadSettings(['site'])
+    const base = (site.url || `https://${req.headers['x-forwarded-host'] || req.headers.host}`).replace(/\/$/, '')
+    const isPdf = /\.pdf(?:[?#]|$)/i.test(d.url || '') && /^https:\/\/ik\.imagekit\.io\//.test(d.url || '')
+    const link = body.type === 'blogs' ? `${base}/blogs/${d.slug || slugify(d.title)}`
+        : isPdf ? `${base}/view?file=${encodeURIComponent(d.url)}&title=${encodeURIComponent(d.title || 'Magazine')}`
+            : d.url ? (/^https?:/.test(d.url) ? d.url : `${base}${d.url}`) : `${base}/blogs`
+
+    const people = new Map() // email -> name
+    const add = (email, name = '') => { const e = String(email || '').trim().toLowerCase(); if (isEmail(e) && !people.has(e)) people.set(e, name) }
+    const aud = Array.isArray(body.audiences) ? body.audiences : []
+    if (aud.includes('users')) for (const u of await db.all("SELECT name, email FROM users WHERE active = 1 AND password_hash != 'invited'")) add(u.email, u.name)
+    if (aud.includes('subscribers')) for (const r of await db.all("SELECT email FROM subscribers WHERE list = 'newsletter'")) add(r.email)
+    const custom = String(body.custom || '').split(/[\s,;]+/).filter(Boolean)
+    const bad = custom.filter(e => !isEmail(e.toLowerCase()))
+    if (bad.length) fail(400, `Not valid email address${bad.length > 1 ? 'es' : ''}: ${bad.slice(0, 5).join(', ')}${bad.length > 5 ? '…' : ''}`)
+    for (const e of custom.slice(0, 5000)) add(e)
+    if (!people.size) fail(400, 'Choose who to email: all users, newsletter subscribers, or type some email addresses.')
+
+    const subject = str(body.subject, 300)
+    const text = str(body.body, 10_000)
+    if (!subject || !text) fail(400, 'Write a subject and a message.')
+    const vars = { title: d.title || '', summary: d.desc || '', edition: d.edition || '', readTime: d.readTime || '', link, site: site.name || 'IEEE ITS VIT' }
+    const recipients = [...people].map(([email, name]) => ({ email, vars: { ...vars, name: String(name || '').split(' ')[0] || 'there' } }))
+    const label = `${body.type === 'blogs' ? 'New blog' : 'Newsletter'}: ${d.title || 'item'} (${recipients.length})`
+    const queued = await createCampaign({ kind: `announce-${body.type}`, label, subject, body: text, recipients, user })
+    await audit(user, 'email', body.type, body.id, `${label} — ${aud.join(' + ') || 'custom'}${custom.length ? ` + ${custom.length} custom` : ''}`)
+    return { queued: [queued] }
+})
+
 route('POST', '/api/admin/content/:type/reorder', async ({ user, params, body }) => {
     requireRole(user, 'editor'); typeDef(params.type)
     const ids = (body.ids || []).map(Number).filter(Boolean)

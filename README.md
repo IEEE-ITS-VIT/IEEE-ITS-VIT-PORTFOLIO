@@ -101,6 +101,10 @@ SEO — is edited at **`/admin`**, and the site also runs the chapter's **recrui
   open and download. It works the same on Android and iPhone, and the phone's Back button closes it.
 - **Shareable viewer page:** `/view?file=<ImageKit PDF link>&title=…` (only ImageKit-hosted PDFs).
 - **Magazines** take an uploaded PDF (or a link) and an optional cover image.
+- **Email a new blog post or magazine issue:** Admin → Blog Posts / Magazines → **Email** on the item. Send to all
+  registered users, newsletter subscribers and/or custom addresses (separated by spaces, commas or new lines);
+  everyone gets it once. The wording is editable ({{name}} {{title}} {{summary}} {{link}}…) and goes out via the Outbox.
+  For a magazine PDF, {{link}} opens it in the site's viewer.
 - **Media Library:** filter by Images / PDFs / Other documents; PDF cards show the first page. Click any file for a
   preview (PDFs in the viewer), its details (type, size, pages, folder, uploader), ready-to-copy links (direct CDN
   link, viewer page, HTML snippet) and **Used in** — every resource, magazine, event, event portal, recruitment
