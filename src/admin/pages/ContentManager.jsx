@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Reorder, useDragControls } from 'framer-motion'
 import { api } from '../../lib/api'
 import { useSite } from '../../context/SiteContext'
@@ -130,7 +130,7 @@ function Row({ item, def, onEdit, onToggle, onDuplicate, onDelete, onEmail }) {
 
 export default function ContentManager({ type }) {
     const def = CONTENT_TYPES[type]
-    const { refresh, content: live } = useSite()
+    const { refresh, content: live, settings: liveSettings } = useSite()
     const toast = useToast()
     const confirm = useConfirm()
     const { data, loading, error, reload, setData } = useLoader(() => api.get(`/admin/content/${type}`).then(r => r.items), [type])
@@ -212,6 +212,9 @@ export default function ContentManager({ type }) {
                 <input className="adm-input search" placeholder="Search…" value={q} onChange={e => setQ(e.target.value)} />
                 <button className="adm-btn primary" onClick={() => setEditing({ data: blank(def), status: 'published' })}><Icon name="plus" size={16} /> Add {def.singular}</button>
             </PageTitle>
+            {type === 'magazines' && liveSettings?.blogs?.magazineEnabled === false && (
+                <p className="adm-hint warn">The Magazines section is switched off, so these magazines are not shown on the website. <Link to="/admin/s/blogs">Turn it on in Blogs Page settings</Link>.</p>
+            )}
             {loading ? <Spinner /> : error ? <p className="adm-hint warn">{error}</p> : filtered.length === 0 ? (
                 <Empty>No {def.label.toLowerCase()} yet.</Empty>
             ) : (

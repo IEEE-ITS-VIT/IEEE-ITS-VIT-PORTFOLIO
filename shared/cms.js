@@ -392,7 +392,7 @@ export const SETTINGS_FORMS = {
     },
     blogs: {
         label: 'Blogs Page', fields: [
-            { name: 'magazineEnabled', label: 'Show magazine banner', type: 'toggle' },
+            { name: 'magazineEnabled', label: 'Show the Magazines / Newsletter section on the Blogs page', type: 'toggle', help: 'When off, magazines added in Publications → Magazines are hidden from the website.' },
             { name: 'magazineTag', label: 'Magazine tag', type: 'text' },
             { name: 'magazineTitle', label: 'Magazine title', type: 'text' },
             { name: 'magazineText', label: 'Magazine text', type: 'textarea' },
