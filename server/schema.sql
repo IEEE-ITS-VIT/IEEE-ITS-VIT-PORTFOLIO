@@ -251,6 +251,10 @@ CREATE TABLE IF NOT EXISTS email_campaigns (
     failed     INTEGER NOT NULL DEFAULT 0,
     failures   TEXT NOT NULL DEFAULT '[]',
     status     TEXT NOT NULL DEFAULT 'queued', -- queued | done | cancelled
+    html       TEXT DEFAULT '',            -- ready-made HTML (resends of single emails); empty = build from body
+    retry_at   TEXT,                       -- do not send before this time (automatic retries)
+    retries    INTEGER NOT NULL DEFAULT 0, -- 0 = original mail-out, 1+ = an automatic or manual resend
+    note       TEXT DEFAULT '',            -- why it is paused / what happened, shown in the Outbox
     created_by TEXT DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))

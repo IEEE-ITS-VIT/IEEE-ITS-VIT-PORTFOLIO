@@ -148,8 +148,12 @@ export function installConnect({ route, requireRole, audit, loadSettings }) {
     return async function connectDigest({ force } = {}) {
         const now = new Date(Date.now() + 5.5 * 3600_000) // IST
         if (!force && now.getUTCDay() !== 1) return { digest: 'not Monday' }
+        const today = now.toISOString().slice(0, 10)
+        const last = parseJson((await db().first("SELECT value FROM settings WHERE key = 'connect_digest'"))?.value, {})
+        if (!force && last.date === today) return { digest: 'already sent today' }
         const pending = await db().all("SELECT title, company, created_at FROM connect_posts WHERE status = 'pending' ORDER BY id")
         if (!pending.length) return { digest: 'nothing pending' }
+        await db().run("INSERT INTO settings (key, value) VALUES ('connect_digest', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [JSON.stringify({ date: today })])
         const { notifications, site } = await loadSettings(['notifications', 'site'])
         const to = notifications?.queryRecipients || []
         const base = (site?.url || '').replace(/\/$/, '')

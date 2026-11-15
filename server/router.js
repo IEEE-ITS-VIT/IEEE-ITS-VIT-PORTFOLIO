@@ -23,7 +23,7 @@ import { cleanLayout, cleanImageStyle } from '../shared/layout.js'
 import { installRecruitment } from './recruit.js'
 import { installPortals } from './portals.js'
 import { installConnect } from './connect.js'
-import { quotaStatus, setDailyLimit, drainCampaigns, createCampaign } from './campaigns.js'
+import { quotaStatus, setDailyLimit, drainCampaigns, createCampaign, resendFailed } from './campaigns.js'
 import { CONTENT_TYPES, EVENT_FIELDS, MOMENT_FIELDS, SETTINGS_FORMS, PRIVATE_SETTINGS, slugify, eventStatus, getPath, setPath } from '../shared/cms.js'
 
 /* ───────────── helpers ───────────── */
@@ -998,7 +998,7 @@ route('GET', '/api/admin/audit', async ({ user }) => {
 /* ── bulk email outbox ── */
 route('GET', '/api/admin/outbox', async ({ user }) => {
     requireRole(user, 'editor')
-    const items = await getDb().all('SELECT id, kind, label, subject, total, cursor, sent, failed, status, created_by, created_at, updated_at FROM email_campaigns ORDER BY id DESC LIMIT 100')
+    const items = await getDb().all("SELECT id, kind, label, subject, total, cursor, sent, failed, status, note, retry_at, retries, (failures != '[]') AS has_failures, created_by, created_at, updated_at FROM email_campaigns ORDER BY id DESC LIMIT 100")
     return { items, quota: await quotaStatus() }
 })
 
@@ -1014,14 +1014,18 @@ route('POST', '/api/admin/outbox/:id/cancel', async ({ user, params }) => {
     return { ok: true }
 })
 
+/* Addresses that failed in one mail-out, with the mail server's reason. */
+route('GET', '/api/admin/outbox/:id/failures', async ({ user, params }) => {
+    requireRole(user, 'editor')
+    const c = await getDb().first('SELECT failures FROM email_campaigns WHERE id = ?', [Number(params.id)])
+    if (!c) fail(404, 'Mail-out not found.')
+    return { items: parseJson(c.failures, []) }
+})
+
 route('POST', '/api/admin/outbox/:id/retry', async ({ user, params }) => {
     requireRole(user, 'editor')
-    const c = await getDb().first('SELECT * FROM email_campaigns WHERE id = ?', [Number(params.id)])
-    if (!c) fail(404, 'Mail-out not found.')
-    const failedEmails = new Set(parseJson(c.failures, []).map(f => f.email))
-    const recipients = parseJson(c.recipients, []).filter(r => failedEmails.has(r.email))
-    const queued = await createCampaign({ kind: c.kind, label: `Retry of #${c.id}`, subject: c.subject, body: c.body, recipients, user })
-    await getDb().run("UPDATE email_campaigns SET failures = '[]' WHERE id = ?", [c.id])
+    const queued = await resendFailed(params.id, user)
+    await audit(user, 'resend', 'email-campaign', params.id, `${queued.total} failed addresses queued again (mail-out #${queued.id})`)
     return { queued: [queued] }
 })
 
@@ -1034,7 +1038,12 @@ route('PUT', '/api/admin/outbox/limits', async ({ user, body }) => {
 
 /* Daily Vercel cron (vercel.json) keeps long mail-outs moving when nobody has the Outbox open. */
 route('GET', '/api/cron/outbox', async ({ req }) => {
-    if (!process.env.CRON_SECRET || req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) fail(401, 'Unauthorized')
+    // With CRON_SECRET set, Vercel sends it and nothing else is accepted. Without it, Vercel's own cron
+    // caller is let in: the job only sends mail an admin already queued (within the daily limit) and a
+    // once-a-day reminder, so the worst an impostor can do is make queued mail leave a little earlier.
+    const secret = process.env.CRON_SECRET
+    const allowed = secret ? req.headers.authorization === `Bearer ${secret}` : /vercel-cron/i.test(req.headers['user-agent'] || '')
+    if (!allowed) fail(401, 'Unauthorized')
     const sent = await drainCampaigns(40_000)
     const digest = await connectDigest().catch(e => ({ digest: `failed: ${e.message}` }))
     return { ...sent, ...digest }

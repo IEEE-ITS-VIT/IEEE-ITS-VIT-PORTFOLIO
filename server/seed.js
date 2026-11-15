@@ -20,7 +20,25 @@ export async function applySchema() {
         for (const s of statements) await db.exec(s)
     } else {
         await db.exec(statements.join(';\n') + ';')
+    }    await ensureColumns()
+}
+
+/** Columns added after a table first shipped (CREATE TABLE IF NOT EXISTS never adds them to an existing table). */
+const ADDED_COLUMNS = {
+    email_campaigns: { html: "TEXT DEFAULT ''", retry_at: 'TEXT', retries: 'INTEGER NOT NULL DEFAULT 0', note: "TEXT DEFAULT ''" },
+}
+export async function ensureColumns() {
+    const db = getDb()
+    const added = []
+    for (const [table, cols] of Object.entries(ADDED_COLUMNS)) {
+        const have = new Set((await db.all(`SELECT name FROM pragma_table_info('${table}')`)).map(c => c.name))
+        for (const [name, type] of Object.entries(cols)) {
+            if (have.has(name)) continue
+            await db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`)
+            added.push(`${table}.${name}`)
+        }
     }
+    return added
 }
 
 /** Inserts default content only where nothing exists yet — never overwrites admin edits. */

@@ -102,7 +102,7 @@ SEO — is edited at **`/admin`**, and the site also runs the chapter's **recrui
   **Nothing is public until an admin publishes it.** Visitors can search and filter by company, year and type.
 - **Admin → Publications → Connect:** posts grouped by the week they were sent; publish, reject (with a note the author
   sees), edit, bulk-publish a week, delete, or **add posts by hand** with a credit line. On Mondays the daily cron emails
-  the query recipients if posts are waiting (needs `CRON_SECRET`).
+  the query recipients if posts are waiting.
 - **Email published questions:** Admin → Connect → *Email new questions* (everything published in the last 7 days),
   *Email selected*, or *Email* on one published post — same audience choices and editable wording as blog emails
   ({{count}} {{list}} {{companies}} {{link}}).
@@ -175,7 +175,7 @@ Set these in `.env.local` for local use and in **Vercel → Settings → Environ
 | `CF_ACCOUNT_ID`, `CF_D1_DATABASE_ID`, `CF_API_TOKEN` | yes* | Cloudflare D1 over the HTTP API (token permission: Account → D1 → Edit). |
 | `D1_GATEWAY_URL`, `D1_GATEWAY_SECRET` | optional* | Use the gateway Worker instead of the HTTP API (recommended for large events, see below). |
 | `IMAGEKIT_PUBLIC_KEY`, `IMAGEKIT_PRIVATE_KEY`, `IMAGEKIT_URL_ENDPOINT`, `IMAGEKIT_FOLDER` | yes | Image uploads and delivery. |
-| `CRON_SECRET` | recommended | Lets the daily Vercel cron continue large email mail-outs. |
+| `CRON_SECRET` | recommended | Locks the daily email job to Vercel's cron. Without it the job still runs (it only sends mail already queued by an admin), accepting Vercel's cron caller. |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | optional | First admin created by `db:setup` when none exists. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS` | optional | Override the **main** SMTP set in the admin. |
 | `SMTP_AUTH_HOST`, `SMTP_AUTH_PORT`, `SMTP_AUTH_SECURE`, `SMTP_AUTH_USER`, `SMTP_AUTH_PASS` | optional | Override the **account-email** SMTP set in the admin. |
@@ -252,8 +252,18 @@ if the account-email SMTP is empty, the main one is used.
 - **Gmail:** use an **App Password** (Google Account → Security → 2-Step Verification → App passwords). A free Gmail
   account sends about **500 emails/day**; Google Workspace about 2,000.
 - **Email Outbox:** bulk mail is queued as one *mail-out* and sent in batches within a **daily limit** (default 400,
-  adjustable). It sends while the Outbox page is open and once a day via the Vercel cron (needs `CRON_SECRET`); a
-  1,500-person mail-out finishes over about four days on free Gmail. Failed addresses can be retried.
+  adjustable). It sends while the Outbox page is open and once a day via the Vercel cron (about 9 AM IST), so a
+  1,500-person mail-out finishes over about four days on free Gmail without anyone watching it.
+- **Failed emails look after themselves:**
+  - *Limit used up* (the site's daily limit, or Gmail's own "daily sending limit exceeded"): the rest waits and goes
+    out automatically the next day. Nobody is skipped and nobody gets it twice.
+  - *Mail server unreachable / login refused:* the mail-out pauses and is tried again automatically (15 minutes later
+    while the Outbox is open, otherwise with the next daily run).
+  - *One address failed for a temporary reason:* it is resent once automatically about 20 minutes later.
+  - *Address looks wrong* (unknown user) or it failed again: listed in the Outbox with the mail server's reason
+    (**Why?**) and a **Resend failed** button.
+  - *Single emails* (booking / contact confirmations, admin notifications) that fail are queued in the Outbox and
+    retried the same way. Login codes are never resent later — they expire in 10 minutes; the person asks for a new one.
 - Certificate emails count towards the same daily limit; sending stops cleanly at the limit and continues where it
   left off the next day.
 
@@ -303,8 +313,8 @@ if the account-email SMTP is empty, the main one is used.
 | Problem | Fix |
 | --- | --- |
 | "Password reset by email is not available" | Set the main or account-email SMTP in Admin → Email & SMTP and send a test. |
-| Bulk emails stop | Daily limit reached — they continue tomorrow (Outbox page or the daily cron with `CRON_SECRET`). |
-| Daily cron returns 401 | Add `CRON_SECRET` in Vercel and redeploy. |
+| Bulk emails stop | Daily limit reached — they continue automatically tomorrow morning (daily cron), or when the Outbox page is opened. |
+| Daily cron returns 401 | `CRON_SECRET` is set but does not match what Vercel sends — set the same value in Vercel and redeploy. |
 | Changes not visible on the site | The public data is cached for about 30 seconds; reload again. |
 | New feature tables missing on D1 | Run `npm run db:setup -- --remote`. |
 | Certificate shows a box/blank for a name | Fonts cover Latin letters; accents are simplified and other scripts are dropped. |

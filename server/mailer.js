@@ -66,7 +66,14 @@ async function log(kind, recipient, subject, status, error = '') {
     } catch (e) { console.error('[mail] could not write log', e.message) }
 }
 
-export async function sendMail({ kind, to, subject, html, text, replyTo, profile = 'main' }) {
+/** Emails that are pointless to send later: codes expire in minutes, tests are tests, digests are rebuilt. */
+const NO_RESEND = /^(password-|test$|connect-digest$)/
+
+/**
+ * Sends one email now. If the mail server refuses or cannot be reached, the message is put in the
+ * Outbox and retried automatically (see campaigns.js) — except short-lived ones such as login codes.
+ */
+export async function sendMail({ kind, to, subject, html, text, replyTo, profile = 'main', noRetry = false }) {
     const recipients = Array.isArray(to) ? to : emailList(to)
     if (!recipients.length) { await log(kind, '-', subject, 'skipped', 'No recipient configured'); return { ok: false, error: 'No recipient configured' } }
     const cfg = await smtpConfig(profile)
@@ -89,8 +96,16 @@ export async function sendMail({ kind, to, subject, html, text, replyTo, profile
         await log(kind, recipients.join(', '), subject, 'sent')
         return { ok: true }
     } catch (e) {
-        await log(kind, recipients.join(', '), subject, 'failed', e.message)
-        return { ok: false, error: e.message }
+        let queued = false
+        if (!noRetry && !NO_RESEND.test(kind)) {
+            try {
+                const { queueResend } = await import('./campaigns.js')
+                await queueResend({ kind, recipients, subject, html, text: text || htmlToText(html), replyTo })
+                queued = true
+            } catch (err) { console.error('[mail] could not queue a resend:', err.message) }
+        }
+        await log(kind, recipients.join(', '), subject, 'failed', `${e.message}${queued ? ' — queued, will be retried automatically' : ''}`)
+        return { ok: false, error: e.message, queued }
     }
 }
 
@@ -205,7 +220,7 @@ export async function openTransport() {
     })
     const from = `"${cfg.fromName.replace(/"/g, '')}" <${cfg.fromEmail}>`
     return {
-        send: ({ to, subject, html, text, attachments }) => transport.sendMail({ from, to, subject, html, text: text || htmlToText(html), attachments }),
+        send: ({ to, subject, html, text, attachments, replyTo }) => transport.sendMail({ from, to, subject, html, text: text || htmlToText(html), attachments, replyTo }),
         close: () => transport.close(),
     }
 }

@@ -6,14 +6,31 @@ import Icon from '../icons'
 
 /**
  * Bulk email queue. Mail-outs are sent in small batches within the daily SMTP limit
- * while this page is open; a daily job continues anything left over.
+ * while this page is open; a daily job continues anything left over. Failed emails are
+ * retried automatically where that can help, and can always be resent by hand.
  */
+const utc = iso => new Date(String(iso).replace(' ', 'T') + 'Z')
+
+/** The addresses that failed in one mail-out and the mail server's reason for each. */
+function Failures({ id }) {
+    const [items, setItems] = useState(null)
+    useEffect(() => { api.get(`/admin/outbox/${id}/failures`).then(r => setItems(r.items)).catch(() => setItems([])) }, [id])
+    if (!items) return <Spinner />
+    if (!items.length) return <p className="adm-hint" style={{ margin: 0 }}>No failed addresses are waiting here (they were already resent).</p>
+    return (
+        <ul className="adm-usage" style={{ maxHeight: 260, overflow: 'auto' }}>
+            {items.map((f, i) => <li key={i}><span><b>{f.email}</b><small className="adm-block">{f.error}</small></span>{f.permanent && <Badge tone="warn">address looks wrong</Badge>}</li>)}
+        </ul>
+    )
+}
+
 export default function Outbox() {
     const { isAdmin } = useAuth()
     const toast = useToast()
     const [data, setData] = useState(null)
     const [running, setRunning] = useState(false)
     const [limit, setLimit] = useState('')
+    const [open, setOpen] = useState(null) // mail-out whose failed addresses are shown
     const stop = useRef(false)
 
     const load = useCallback(() => api.get('/admin/outbox').then(d => { setData(d); setLimit(String(d.quota.dailyLimit)); return d }).catch(e => toast(e.message, 'error')), [toast])
@@ -26,7 +43,9 @@ export default function Outbox() {
             while (!stop.current) {
                 const r = await api.post('/admin/outbox/process')
                 await load()
-                if (r.quotaReached) { toast("Today's email limit is reached — sending continues tomorrow.", 'error'); break }
+                if (r.quotaReached) { toast(r.providerLimit ? "The email provider's daily limit is used up — the rest goes out automatically tomorrow." : "Today's email limit is reached — sending continues automatically tomorrow.", 'error'); break }
+                if (r.paused) { toast('The mail server could not be reached — it will be tried again automatically in a few minutes.', 'error'); break }
+                if (r.waiting) { toast('The rest is scheduled for an automatic retry.'); break }
                 if (r.idle) { toast('All queued emails are sent.'); break }
                 if (!r.sent && !r.busy) break
             }
@@ -43,7 +62,7 @@ export default function Outbox() {
     }, [load])
 
     const cancel = async id => { await api.post(`/admin/outbox/${id}/cancel`); load() }
-    const retry = async id => { try { await api.post(`/admin/outbox/${id}/retry`); toast('Failed addresses queued again'); load() } catch (e) { toast(e.message, 'error') } }
+    const retry = async id => { try { await api.post(`/admin/outbox/${id}/retry`); toast('Failed addresses queued again'); setOpen(null); const d = await load(); if (d?.quota.remaining > 0) run() } catch (e) { toast(e.message, 'error') } }
     const saveLimit = async () => { try { await api.put('/admin/outbox/limits', { dailyLimit: Number(limit) }); toast('Daily limit saved'); load() } catch (e) { toast(e.message, 'error') } }
 
     if (!data) return <Spinner />
@@ -52,7 +71,7 @@ export default function Outbox() {
 
     return (
         <>
-            <PageTitle title="Email Outbox" subtitle="Recruitment results, reminders and event emails are queued here and sent in small batches. Gmail allows about 500 emails a day, so large mail-outs continue automatically the next day.">
+            <PageTitle title="Email Outbox" subtitle="Emails are queued here and sent in small batches. Gmail allows about 500 a day, so anything over the limit goes out automatically the next morning (around 9 AM IST) — even with this page closed. Emails that fail are retried automatically; whatever still fails is listed with its reason and a Resend button.">
                 {running
                     ? <button className="adm-btn" onClick={() => { stop.current = true }}>Pause sending</button>
                     : <button className="adm-btn primary" disabled={!pending.length || !q.remaining} onClick={run}><Icon name="send" size={16} /> Send now</button>}
@@ -79,15 +98,24 @@ export default function Outbox() {
                         <tbody>
                             {data.items.map(c => (
                                 <tr key={c.id}>
-                                    <td><strong>{c.label || c.kind}</strong><small className="adm-block">{c.subject}</small></td>
+                                    <td><strong>{c.label || c.kind}</strong><small className="adm-block">{c.subject}</small>
+                                        {c.note && <small className="adm-block" style={{ color: /^Paused|could not/i.test(c.note) ? 'var(--a-warn)' : undefined }}>{c.note}</small>}
+                                        {open === c.id && <div style={{ marginTop: 8 }}><Failures id={c.id} /></div>}
+                                    </td>
                                     <td style={{ minWidth: 180 }}>
                                         <div className="adm-progress"><span style={{ width: `${c.total ? (c.sent / c.total) * 100 : 0}%` }} /></div>
                                         <small>{c.sent} / {c.total} sent{c.failed ? ` · ${c.failed} failed` : ''}</small>
                                     </td>
-                                    <td><Badge tone={c.status === 'done' ? 'ok' : c.status === 'cancelled' ? 'neutral' : 'info'}>{c.status === 'queued' ? 'Sending' : c.status}</Badge></td>
+                                    <td>{(() => {
+                                        if (c.status !== 'queued') return <Badge tone={c.status === 'done' ? (c.has_failures ? 'warn' : 'ok') : 'neutral'}>{c.status === 'done' ? (c.has_failures ? 'Done, some failed' : 'Done') : c.status}</Badge>
+                                        if (c.retry_at && utc(c.retry_at) > new Date()) return <Badge tone="warn">Retrying {utc(c.retry_at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}</Badge>
+                                        if (!q.remaining) return <Badge tone="warn">Continues tomorrow</Badge>
+                                        return <Badge tone="info">Sending</Badge>
+                                    })()}</td>
                                     <td><small>{fmtDate(c.created_at)}<br />{c.created_by}</small></td>
                                     <td className="adm-row end">
-                                        {c.failed > 0 && <button className="adm-btn small" onClick={() => retry(c.id)}>Retry failed</button>}
+                                        {!!c.has_failures && <button className="adm-btn small ghost" onClick={() => setOpen(o => (o === c.id ? null : c.id))}>{open === c.id ? 'Hide' : 'Why?'}</button>}
+                                        {!!c.has_failures && <button className="adm-btn small" onClick={() => retry(c.id)}>Resend failed</button>}
                                         {c.status === 'queued' && <button className="adm-btn small ghost danger-text" onClick={() => cancel(c.id)}>Cancel</button>}
                                     </td>
                                 </tr>
