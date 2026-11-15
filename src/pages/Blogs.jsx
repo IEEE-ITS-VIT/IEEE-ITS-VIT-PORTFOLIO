@@ -49,9 +49,16 @@ export default function Blogs() {
         let tries = 0
         const t = setInterval(() => {
             const el = document.getElementById('magazines')
-            if (el || ++tries > 20) { clearInterval(t); el?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
+            if (!el && ++tries <= 20) return
+            clearInterval(t)
+            if (!el) return
+            const target = () => Math.max(0, el.getBoundingClientRect().top + window.scrollY - 80)
+            window.scrollTo({ top: target(), behavior: 'smooth' })
+            // Smooth scrolling can be cut short (images loading above, reduced motion, background tabs): make sure we arrive.
+            settle = setTimeout(() => { if (Math.abs(el.getBoundingClientRect().top - 80) > 40) window.scrollTo({ top: target(), behavior: 'instant' }) }, 900)
         }, 150)
-        return () => clearInterval(t)
+        let settle
+        return () => { clearInterval(t); clearTimeout(settle) }
     }, [slug, location.hash, location.key])
 
     if (slug) {
