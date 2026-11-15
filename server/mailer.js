@@ -77,6 +77,8 @@ export async function sendMail({ kind, to, subject, html, text, replyTo, profile
     try {
         const transport = nodemailer.createTransport({
             host: cfg.host, port: cfg.port, secure: cfg.secure,
+            requireTLS: cfg.port === 587 && !cfg.secure,
+            tls: { minVersion: 'TLSv1.2' },
             auth: { user: cfg.user, pass: cfg.pass },
             connectionTimeout: 8000, greetingTimeout: 8000, socketTimeout: 10000,
         })
@@ -197,6 +199,8 @@ export async function openTransport() {
     if (!cfg.host || !cfg.user || !cfg.pass) return null
     const transport = nodemailer.createTransport({
         pool: true, maxConnections: 1, host: cfg.host, port: cfg.port, secure: cfg.secure,
+            requireTLS: cfg.port === 587 && !cfg.secure,
+            tls: { minVersion: 'TLSv1.2' },
         auth: { user: cfg.user, pass: cfg.pass }, connectionTimeout: 8000, greetingTimeout: 8000, socketTimeout: 12000,
     })
     const from = `"${cfg.fromName.replace(/"/g, '')}" <${cfg.fromEmail}>`
