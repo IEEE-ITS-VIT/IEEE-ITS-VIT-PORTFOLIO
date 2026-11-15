@@ -50,7 +50,7 @@ export default function Blogs() {
         return (
             <>
                 <Seo title={b.title} description={b.desc} image={b.image} type="article" jsonLd={jsonLd} />
-                <PageHeader title={b.title} overline={`Blogs / ${b.tag || 'Article'}`} subtitle={[b.date, b.readTime].filter(Boolean).join(' · ')} wide />
+                <PageHeader title={b.title} overline={`Blogs / ${b.tag || 'Article'}`} subtitle={[b.date, b.readTime].filter(Boolean).join(' · ')} wide article sectionId="blog.article" />
                 <section className="section" style={{ borderTop: 0 }}>
                     <div className="wrap">
                         {b.image && <Reveal><Img src={b.image} alt={b.title} ratio="21x9" width={1600} eager /></Reveal>}
