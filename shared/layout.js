@@ -27,6 +27,8 @@ export const SECTIONS = [
     { id: 'project.detail', page: '/projects', label: 'Project and resource pages', kind: 'split', images: true },
     { id: 'webteam.note', page: '/web-team', label: 'Developers’ note', kind: 'split' },
     { id: 'blogs.list', page: '/blogs', label: 'Blog list', kind: 'grid', images: true },
+    { id: 'magazines.list', page: '/magazines', label: 'Magazines page', kind: 'grid', images: true },
+    { id: 'connect.list', page: '/connect', label: 'Connect page (shared questions)', kind: 'grid' },
     { id: 'blog.article', page: '/blogs/outlook-outage-november-2026', label: 'Blog article page (title size, fonts, colours)', kind: 'header' },
     { id: 'vlogs.list', page: '/vlogs', label: 'Vlogs', kind: 'grid', images: true },
     { id: 'merch.list', page: '/merch', label: 'Merch products', kind: 'grid', images: true },

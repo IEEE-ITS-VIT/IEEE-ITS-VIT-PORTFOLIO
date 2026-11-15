@@ -41,6 +41,8 @@ const Recruitment = lazy(() => import('./pages/Recruitment'))
 const RecruitmentTest = lazy(() => import('./pages/RecruitmentTest'))
 const EventPortal = lazy(() => import('./pages/EventPortal'))
 const ViewPdf = lazy(() => import('./pages/ViewPdf'))
+const Connect = lazy(() => import('./pages/Connect'))
+const Magazines = lazy(() => import('./pages/Magazines'))
 const PortalJudge = lazy(() => import('./pages/PortalJudge'))
 const Lazy = ({ children }) => <Suspense fallback={<div className="wrap" style={{ padding: '120px 0' }}><div className="skeleton" style={{ height: 300 }} /></div>}>{children}</Suspense>
 
@@ -132,6 +134,8 @@ function App() {
                 <Route path="/e/:slug" element={<Lazy><EventPortal /></Lazy>} />
                 <Route path="/e/:slug/judge" element={<Lazy><PortalJudge /></Lazy>} />
                 <Route path="/view" element={<Lazy><ViewPdf /></Lazy>} />
+                <Route path="/connect" element={<Lazy><Connect /></Lazy>} />
+                <Route path="/magazines" element={<Lazy><Magazines /></Lazy>} />
                 <Route path="/quanta-26" element={<EventDetail slug="quanta-26" />} />
                 <Route path="/qunata-26" element={<EventDetail slug="quanta-26" />} />
                 <Route path="*" element={<NotFound />} />

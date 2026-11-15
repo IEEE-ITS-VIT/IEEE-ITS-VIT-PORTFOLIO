@@ -95,6 +95,16 @@ SEO — is edited at **`/admin`**, and the site also runs the chapter's **recrui
   plus open-in-new-tab and download (Admin → Publications → Resources).
 - **Advisory Board** (`/advisory-board`, More menu): past boards and web teams by year, managed in Admin → People.
 
+### Connect (`/connect`) and Magazines (`/magazines`) — More menu
+- **Connect:** members who are signed in share interview questions and topics: the question, answer / approach, company,
+  role, year, round, difficulty, tags and resource links (GitHub, YouTube, LinkedIn, LeetCode, GfG… detected
+  automatically). Up to 5 posts per member per week; they can post anonymously and see the status of their posts.
+  **Nothing is public until an admin publishes it.** Visitors can search and filter by company, year and type.
+- **Admin → Publications → Connect:** posts grouped by the week they were sent; publish, reject (with a note the author
+  sees), edit, bulk-publish a week, delete, or **add posts by hand** with a credit line. On Mondays the daily cron emails
+  the query recipients if posts are waiting (needs `CRON_SECRET`).
+- **Magazines:** every magazine with its cover; PDFs open in the built-in viewer and can be downloaded.
+
 ### PDFs and the Media Library
 - **Built-in PDF viewer** (pdf.js, loaded only when needed): any link to a PDF anywhere on the site — resources,
   magazines, event-portal and recruitment texts, blog posts — opens inside the site with page navigation, zoom,

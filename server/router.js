@@ -22,6 +22,7 @@ import { DEFAULT_SETTINGS, DEFAULT_PRIVATE_SETTINGS, PUBLIC_SETTING_KEYS } from 
 import { cleanLayout, cleanImageStyle } from '../shared/layout.js'
 import { installRecruitment } from './recruit.js'
 import { installPortals } from './portals.js'
+import { installConnect } from './connect.js'
 import { quotaStatus, setDailyLimit, drainCampaigns, createCampaign } from './campaigns.js'
 import { CONTENT_TYPES, EVENT_FIELDS, MOMENT_FIELDS, SETTINGS_FORMS, PRIVATE_SETTINGS, slugify, eventStatus, getPath, setPath } from '../shared/cms.js'
 
@@ -245,7 +246,7 @@ route('GET', '/api/sitemap.xml', async ({ req, res }) => {
     const abs = u => (!u ? '' : /^https?:/i.test(u) ? u : `${base}${u.startsWith('/') ? '' : '/'}${u}`)
     const pages = [
         ['/', '1.0', 'weekly'], ['/timeline', '0.9', 'weekly'], ['/moments', '0.7', 'monthly'], ['/blogs', '0.7', 'weekly'],
-        ['/vlogs', '0.6', 'monthly'], ['/faculty', '0.6', 'yearly'], ['/advisory-board', '0.6', 'yearly'], ['/projects', '0.8', 'weekly'], ['/web-team', '0.5', 'yearly'], ['/merch', '0.6', 'monthly'],
+        ['/vlogs', '0.6', 'monthly'], ['/faculty', '0.6', 'yearly'], ['/advisory-board', '0.6', 'yearly'], ['/connect', '0.7', 'weekly'], ['/magazines', '0.6', 'monthly'], ['/projects', '0.8', 'weekly'], ['/web-team', '0.5', 'yearly'], ['/merch', '0.6', 'monthly'],
         ['/games', '0.4', 'yearly'], ['/faq', '0.6', 'monthly'], ['/join', '0.7', 'monthly'], ['/contact', '0.6', 'yearly'],
         ['/suggestions', '0.4', 'yearly'], ...(recruitment?.open ? [['/recruitment', '0.9', 'daily']] : []),
     ]
@@ -1016,11 +1017,14 @@ route('PUT', '/api/admin/outbox/limits', async ({ user, body }) => {
 /* Daily Vercel cron (vercel.json) keeps long mail-outs moving when nobody has the Outbox open. */
 route('GET', '/api/cron/outbox', async ({ req }) => {
     if (!process.env.CRON_SECRET || req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) fail(401, 'Unauthorized')
-    return drainCampaigns(45_000)
+    const sent = await drainCampaigns(40_000)
+    const digest = await connectDigest().catch(e => ({ digest: `failed: ${e.message}` }))
+    return { ...sent, ...digest }
 })
 
 installRecruitment({ route, requireRole, audit, loadSettings })
 installPortals({ route, requireRole, audit, loadSettings, releaseImages, imageUrls })
+const connectDigest = installConnect({ route, requireRole, audit, loadSettings })
 
 export async function handle(req, res, pathOverride) {
     const url = new URL(req.url, 'http://local')

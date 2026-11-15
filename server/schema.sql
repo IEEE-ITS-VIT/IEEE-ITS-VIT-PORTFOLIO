@@ -313,3 +313,29 @@ CREATE TABLE IF NOT EXISTS ev_scores (
     UNIQUE (team_id, round, evaluator_id)
 );
 CREATE INDEX IF NOT EXISTS idx_ev_scores_portal ON ev_scores (portal_id, round);
+
+-- Connect: interview questions and topics shared by members; shown only after an admin approves them.
+CREATE TABLE IF NOT EXISTS connect_posts (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER REFERENCES users (id) ON DELETE SET NULL,
+    kind        TEXT NOT NULL DEFAULT 'interview', -- interview | topic
+    title       TEXT NOT NULL,                     -- the question or topic
+    answer      TEXT DEFAULT '',                   -- answer, approach or notes
+    company     TEXT DEFAULT '',
+    role        TEXT DEFAULT '',
+    year        INTEGER,
+    round       TEXT DEFAULT '',                   -- e.g. Online test, Technical 1, HR
+    difficulty  TEXT DEFAULT '',                   -- easy | medium | hard
+    tags        TEXT NOT NULL DEFAULT '[]',
+    links       TEXT NOT NULL DEFAULT '[]',        -- [{ type, url }]: github, youtube, linkedin, leetcode…
+    anonymous   INTEGER NOT NULL DEFAULT 0,
+    author_name TEXT DEFAULT '',                   -- credit for entries an admin adds by hand
+    status      TEXT NOT NULL DEFAULT 'pending',   -- pending | approved | rejected
+    admin_note  TEXT DEFAULT '',
+    reviewed_by INTEGER,
+    reviewed_at TEXT,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_connect_status ON connect_posts (status, created_at);
+CREATE INDEX IF NOT EXISTS idx_connect_user ON connect_posts (user_id, created_at);
