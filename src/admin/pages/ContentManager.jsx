@@ -301,11 +301,7 @@ export default function ContentManager({ type }) {
             {type === 'magazines' && liveSettings?.blogs?.magazineEnabled === false && (
                 <p className="adm-hint warn">The Magazines section is switched off, so these magazines are not shown on the website. <Link to="/admin/s/blogs">Turn it on in Blogs Page settings</Link>.</p>
             )}
-            {type === 'web_team' && (
-                <p className="adm-hint" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-                    <Icon name="lock" size={14} /> <span><strong>Note:</strong> Likhith Medarametla is password-protected. Password can be edited or disabled in <Link to="/join" style={{ textDecoration: 'underline' }}>My Profile</Link>.</span>
-                </p>
-            )}
+
             {loading ? <Spinner /> : error ? <p className="adm-hint warn">{error}</p> : filtered.length === 0 ? (
                 <Empty>No {def.label.toLowerCase()} yet.</Empty>
             ) : (

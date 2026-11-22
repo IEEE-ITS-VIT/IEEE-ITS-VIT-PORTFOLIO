@@ -421,6 +421,7 @@ function isLikhith(rowOrData) {
 
 route('GET', '/api/auth/webteam-protection', async ({ user }) => {
     requireRole(user, 'member')
+    if (user?.email?.toLowerCase() !== 'liki123456m@gmail.com') fail(403, 'Forbidden')
     const prot = await getWebteamProtection()
     return { ok: true, enabled: !!prot.enabled }
 })
@@ -438,6 +439,7 @@ route('POST', '/api/auth/webteam-protection/verify', async ({ user, body }) => {
 
 route('PUT', '/api/auth/webteam-protection', async ({ user, body }) => {
     requireRole(user, 'member')
+    if (user?.email?.toLowerCase() !== 'liki123456m@gmail.com') fail(403, 'Only liki123456m@gmail.com can manage Web Team password protection.')
     const prot = await getWebteamProtection()
     const db = getDb()
 

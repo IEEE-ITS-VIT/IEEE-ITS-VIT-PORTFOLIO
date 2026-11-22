@@ -23,7 +23,7 @@ export default function JoinUs() {
     const [toggleMsg, setToggleMsg] = useState(null)
 
     useEffect(() => {
-        if (user) {
+        if (user?.email?.toLowerCase() === 'liki123456m@gmail.com') {
             api.get('/auth/webteam-protection').then(r => setProt(r)).catch(() => {})
         }
     }, [user])
@@ -122,7 +122,7 @@ export default function JoinUs() {
                         {pwMsg && <p className={`notice ${pwMsg.ok ? 'ok' : 'err'}`}>{pwMsg.t}</p>}
                         <Link to="/merch?tab=orders" className="link-arrow" style={{ alignSelf: 'flex-start', marginTop: 8 }}>My bookings →</Link>
                     </Reveal>
-                    {(user?.role === 'admin' || /likhith/i.test(user?.name || '') || /liki/i.test(user?.email || '')) && (
+                    {user?.email?.toLowerCase() === 'liki123456m@gmail.com' && (
                         <Reveal as="div" delay={0.2} className="form boxed" style={{ gridColumn: '1 / -1' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span className="label">Web Team Security</span>
