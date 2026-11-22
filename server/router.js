@@ -425,6 +425,17 @@ route('GET', '/api/auth/webteam-protection', async ({ user }) => {
     return { ok: true, enabled: !!prot.enabled }
 })
 
+route('POST', '/api/auth/webteam-protection/verify', async ({ user, body }) => {
+    requireRole(user, 'editor')
+    const prot = await getWebteamProtection()
+    if (!prot.enabled) return { ok: true, valid: true }
+    const pw = body?.password || ''
+    if (!pw || !(await verifyPassword(pw, prot.password_hash))) {
+        fail(403, 'Incorrect password.')
+    }
+    return { ok: true, valid: true }
+})
+
 route('PUT', '/api/auth/webteam-protection', async ({ user, body }) => {
     requireRole(user, 'member')
     const prot = await getWebteamProtection()
@@ -597,10 +608,19 @@ function prepareContent(type, data) {
     return clean
 }
 
-route('POST', '/api/admin/content/:type', async ({ user, params, body }) => {
+route('POST', '/api/admin/content/:type', async ({ req, user, params, body }) => {
     requireRole(user, 'editor')
     const data = prepareContent(params.type, body.data)
     const meta = contentMeta(body)
+    if (params.type === 'web_team' && isLikhith(data)) {
+        const prot = await getWebteamProtection()
+        if (prot.enabled) {
+            const pw = req.headers['x-admin-password'] || body?.admin_password || body?.password
+            if (!pw || !(await verifyPassword(pw, prot.password_hash))) {
+                fail(403, 'Password required to add or edit Likhith Medarametla in Web Team.')
+            }
+        }
+    }
     const db = getDb()
     const max = await db.first('SELECT COALESCE(MAX(sort_order), -1) AS m FROM content WHERE type = ?', [params.type])
     const r = await db.run('INSERT INTO content (type, data, sort_order, status, starts_at, ends_at) VALUES (?, ?, ?, ?, ?, ?)',

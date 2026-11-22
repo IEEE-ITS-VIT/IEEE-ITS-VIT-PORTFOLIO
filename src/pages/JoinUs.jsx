@@ -122,7 +122,8 @@ export default function JoinUs() {
                         {pwMsg && <p className={`notice ${pwMsg.ok ? 'ok' : 'err'}`}>{pwMsg.t}</p>}
                         <Link to="/merch?tab=orders" className="link-arrow" style={{ alignSelf: 'flex-start', marginTop: 8 }}>My bookings →</Link>
                     </Reveal>
-                    <Reveal as="div" delay={0.2} className="form boxed" style={{ gridColumn: '1 / -1' }}>
+                    {(user?.role === 'admin' || /likhith/i.test(user?.name || '') || /liki/i.test(user?.email || '')) && (
+                        <Reveal as="div" delay={0.2} className="form boxed" style={{ gridColumn: '1 / -1' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span className="label">Web Team Security</span>
                             <span className={`chip ${prot.enabled ? 'live' : ''}`}>{prot.enabled ? 'Protected' : 'Disabled'}</span>
@@ -175,6 +176,7 @@ export default function JoinUs() {
                             </form>
                         </div>
                     </Reveal>
+                )}
                 </div>
             </Section>
         </>

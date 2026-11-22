@@ -77,7 +77,7 @@ export default function ContentManager({ type }) {
     const [saving, setSaving] = useState(false)
     const [q, setQ] = useState('')
 
-    const isProtected = item => type === 'web_team' && /likhith/i.test(JSON.stringify(item || ''))
+    const isProtected = target => type === 'web_team' && /likhith/i.test(typeof target === 'string' ? target : JSON.stringify(target || ''))
     const [pwPrompt, setPwPrompt] = useState(null)
     const [passwordInput, setPasswordInput] = useState('')
     const [pwBusy, setPwBusy] = useState(false)
@@ -95,8 +95,11 @@ export default function ContentManager({ type }) {
         setPwBusy(true)
         setPwError('')
         try {
-            await pwPrompt.onSubmit(passwordInput)
+            await api.post('/auth/webteam-protection/verify', { password: passwordInput })
+            const verifiedPw = passwordInput
+            const callback = pwPrompt?.onSubmit
             setPwPrompt(null)
+            if (callback) await callback(verifiedPw)
         } catch (err) {
             setPwError(err.message || 'Incorrect password.')
         } finally {
@@ -108,19 +111,31 @@ export default function ContentManager({ type }) {
 
     const afterChange = () => { refresh(true) }
 
-    const save = async () => {
+    const doSave = async suppliedPw => {
         setSaving(true)
         try {
-            const pw = editing._password
+            const pw = suppliedPw || editing._password
             const headers = pw ? { 'x-admin-password': pw } : {}
             const body = { data: editing.data, status: editing.status, starts_at: editing.starts_at || null, ends_at: editing.ends_at || null, admin_password: pw }
-            const { item } = editing.id ? await api.put(`/admin/content/${type}/${editing.id}`, body, { headers }) : await api.post(`/admin/content/${type}`, body)
+            const { item } = editing.id ? await api.put(`/admin/content/${type}/${editing.id}`, body, { headers }) : await api.post(`/admin/content/${type}`, body, { headers })
             setData(list => (editing.id ? list.map(x => (x.id === item.id ? item : x)) : [...list, item]))
             toast(`${def.singular} ${editing.id ? 'updated' : 'created'}`)
             setEditing(null)
             afterChange()
         } catch (e) { toast(e.message, 'error') }
         finally { setSaving(false) }
+    }
+
+    const save = async () => {
+        const needsPw = isProtected(editing?.data) || isProtected(editing)
+        if (needsPw && !editing?._password) {
+            promptPassword('Enter password to save changes for Likhith Medarametla in Web Team.', async verifiedPw => {
+                setEditing(s => ({ ...s, _password: verifiedPw }))
+                await doSave(verifiedPw)
+            })
+            return
+        }
+        await doSave(editing?._password)
     }
 
     const toggle = async (item, on, password) => {
@@ -158,8 +173,8 @@ export default function ContentManager({ type }) {
 
     const handleEdit = item => {
         if (isProtected(item)) {
-            promptPassword('Enter password to edit Likhith Medarametla in Web Team.', async pw => {
-                setEditing({ id: item.id, data: strip(item), status: item._status, starts_at: toLocalInput(item._starts_at), ends_at: toLocalInput(item._ends_at), _password: pw })
+            promptPassword('Enter password to edit Likhith Medarametla in Web Team.', async verifiedPw => {
+                setEditing({ id: item.id, data: strip(item), status: item._status, starts_at: toLocalInput(item._starts_at), ends_at: toLocalInput(item._ends_at), _password: verifiedPw })
             })
         } else {
             setEditing({ id: item.id, data: strip(item), status: item._status, starts_at: toLocalInput(item._starts_at), ends_at: toLocalInput(item._ends_at) })
@@ -168,8 +183,8 @@ export default function ContentManager({ type }) {
 
     const handleToggle = (item, on) => {
         if (isProtected(item)) {
-            promptPassword(`Enter password to ${on ? 'publish' : 'disable (move to draft)'} Likhith Medarametla in Web Team.`, async pw => {
-                await toggle(item, on, pw)
+            promptPassword(`Enter password to ${on ? 'publish' : 'disable (move to draft)'} Likhith Medarametla in Web Team.`, async verifiedPw => {
+                await toggle(item, on, verifiedPw)
             })
         } else {
             toggle(item, on)
@@ -178,8 +193,8 @@ export default function ContentManager({ type }) {
 
     const handleRemove = item => {
         if (isProtected(item)) {
-            promptPassword('Enter password to delete Likhith Medarametla from Web Team.', async pw => {
-                await remove(item, pw)
+            promptPassword('Enter password to delete Likhith Medarametla from Web Team.', async verifiedPw => {
+                await remove(item, verifiedPw)
             })
         } else {
             remove(item)
