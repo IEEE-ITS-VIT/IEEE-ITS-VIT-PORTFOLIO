@@ -26,6 +26,12 @@ export async function applySchema() {
 /** Columns added after a table first shipped (CREATE TABLE IF NOT EXISTS never adds them to an existing table). */
 const ADDED_COLUMNS = {
     email_campaigns: { html: "TEXT DEFAULT ''", retry_at: 'TEXT', retries: 'INTEGER NOT NULL DEFAULT 0', note: "TEXT DEFAULT ''" },
+    users: {
+        position: "TEXT DEFAULT ''",
+        domains: "TEXT DEFAULT '[]'",
+        social_links: "TEXT DEFAULT '{}'",
+        extra: "TEXT DEFAULT '{}'",
+    },
 }
 export async function ensureColumns() {
     const db = getDb()

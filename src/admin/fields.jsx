@@ -212,7 +212,7 @@ export function ImageAdjust({ url, onClose }) {
 }
 
 /* ---------- Single image ---------- */
-function ImageInput({ value, onChange }) {
+export function ImageInput({ value, onChange }) {
     const [open, setOpen] = useState(false)
     const [adjust, setAdjust] = useState(false)
     const [busy, setBusy] = useState(false)
@@ -225,6 +225,18 @@ function ImageInput({ value, onChange }) {
         catch (e) { toast(e.message, 'error') }
         finally { setBusy(false) }
     }
+    const removePhoto = async () => {
+        const old = value
+        onChange('')
+        if (old && /ik\.imagekit\.io/.test(old)) {
+            try {
+                await api.post('/admin/media/delete-by-url', { url: old })
+                toast('Photo removed from ImageKit')
+            } catch (e) {
+                console.warn('ImageKit cleanup on remove:', e.message)
+            }
+        }
+    }
     return (
         <div className="adm-image-input" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); quickUpload(e.dataTransfer.files[0]) }}>
             <div className="adm-image-preview">{value ? <img src={thumb(value)} alt="" /> : <span>No image</span>}</div>
@@ -234,7 +246,7 @@ function ImageInput({ value, onChange }) {
                     <button type="button" className="adm-btn small" onClick={() => setOpen(true)}>Library</button>
                     <button type="button" className="adm-btn small" disabled={busy} onClick={() => fileRef.current.click()}>{busy ? 'Uploading…' : 'Upload'}</button>
                     {value && <button type="button" className="adm-btn small" onClick={() => setAdjust(true)}><Icon name="crop" size={14} /> Adjust</button>}
-                    {value && <button type="button" className="adm-btn small ghost" onClick={() => onChange('')}>Remove</button>}
+                    {value && <button type="button" className="adm-btn small ghost" onClick={removePhoto}>Remove</button>}
                 </div>
                 <input ref={fileRef} type="file" accept={ACCEPT} hidden onChange={e => { quickUpload(e.target.files[0]); e.target.value = '' }} />
             </div>

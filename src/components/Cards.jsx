@@ -18,10 +18,22 @@ export function PersonCard({ person, subtitle, delay = 0, link, from }) {
     const enter = ENTER[from] ? { x: near(ENTER[from].x), y: near(ENTER[from].y) } : { x: 0, y: 24 }
     // Entries created ahead of time (no name yet) show a quiet placeholder instead of empty text.
     if (!person.name) person = { ...person, name: 'Name to be added', role: person.role || 'Position', placeholder: true }
-    const socials = [['instagram', person.instagram], ['linkedin', person.linkedin], ['website', link]].filter(([, u]) => u)
+    const socials = [
+        ['instagram', person.instagram],
+        ['linkedin', person.linkedin],
+        ['github', person.github],
+        ['website', person.website || link],
+    ].filter(([, u]) => u)
+
+    const rawDomains = Array.isArray(person.domains)
+        ? person.domains
+        : typeof person.domains === 'string'
+        ? person.domains.split(/[,;\n]/).map(s => s.trim()).filter(Boolean)
+        : []
+
     return (
         <Reveal className={`person${person.placeholder ? ' placeholder' : ''}`} delay={delay} x={enter.x} y={enter.y}>
-            <Img src={person.image} alt={person.placeholder ? '' : person.name} ratio="4x5" width={600} face focus={person.focus || '50% 30%'} fallback={person.placeholder ? '' : person.initials || initials(person.name)}>
+            <Img src={person.image} alt={person.placeholder ? '' : person.name} ratio="4x5" width={600} focus={person.focus || '50% 30%'} fallback={person.placeholder ? '' : person.initials || initials(person.name)}>
                 {socials.length > 0 && (
                     <div className="socials">
                         {socials.map(([p, u]) => <SmartLink key={p} to={u} className="icon-btn" aria-label={`${person.name} on ${p}`}><SocialIcon platform={p} /></SmartLink>)}
@@ -31,6 +43,15 @@ export function PersonCard({ person, subtitle, delay = 0, link, from }) {
             <div>
                 <h3>{person.name}</h3>
                 <div className="role">{subtitle ?? person.role}</div>
+                {rawDomains.length > 0 && (
+                    <div className="person-domains" style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+                        {rawDomains.map((d, idx) => (
+                            <span key={idx} className="mono" style={{ fontSize: '.7rem', opacity: .8, background: 'var(--surface-2)', padding: '1px 6px', borderRadius: 4 }}>
+                                {typeof d === 'string' ? d : d.name}
+                            </span>
+                        ))}
+                    </div>
+                )}
             </div>
         </Reveal>
     )

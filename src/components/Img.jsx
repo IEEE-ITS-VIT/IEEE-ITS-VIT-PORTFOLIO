@@ -14,9 +14,14 @@ export default function Img({ src, alt = '', ratio = '16x9', width = 800, focus,
     const st = src ? settings.image_styles?.[src] : null
     const [h] = ratio.split('x').map(Number).reverse()
     const w = Number(ratio.split('x')[0])
-    const url = !src || err ? '' : st ? img(src, { w: width }) : img(src, { w: width, h: Math.round((width * h) / w), face })
+    const isFramed = !!(st || focus)
+    const url = !src || err ? '' : isFramed ? img(src, { w: width }) : img(src, { w: width, h: Math.round((width * h) / w), face })
     const imgStyle = st
-        ? { objectFit: st.fit, objectPosition: `${st.x}% ${st.y}%`, ...(st.zoom > 1 ? { scale: String(st.zoom), transformOrigin: `${st.x}% ${st.y}%` } : {}) }
+        ? {
+            objectFit: st.fit || 'cover',
+            objectPosition: `${st.x}% ${st.y}%`,
+            ...(st.zoom > 1 ? { transform: `scale(${st.zoom})`, transformOrigin: `${st.x}% ${st.y}%` } : {}),
+        }
         : focus ? { objectPosition: focus } : undefined
     return (
         <div className={`frame r-${ratio}${contain ? ' contain' : ''} ${className}`}>

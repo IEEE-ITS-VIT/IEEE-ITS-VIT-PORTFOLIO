@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { useAuth } from '../../hooks/useAuth'
 import { PageTitle, Badge, Spinner, useToast, useConfirm, useLoader, fmtDate, Modal, Drawer, Switch, downloadCsv, Empty } from '../ui'
+import { downloadXlsx } from '../../lib/xlsx'
+import { ImageInput } from '../fields'
 import Icon from '../icons'
 
 const ROLES = {
@@ -10,6 +12,19 @@ const ROLES = {
     editor: 'Editor — manages content, events, media, orders & queries',
     admin: 'Admin — everything incl. users, email & audit log',
 }
+
+const STANDARD_DOMAINS = [
+    'Technical',
+    'Project',
+    'Editorial',
+    'Design & Creative',
+    'Research and Development',
+    'Publicity',
+    'Events & Management',
+    'Out-Reach',
+    'Finance',
+    'Web Team',
+]
 
 const TABS = [
     { key: 'all', label: 'All Directory' },
@@ -34,6 +49,9 @@ export default function MembersMaster() {
     const [domainFilter, setDomainFilter] = useState('')
 
     const [selectedMember, setSelectedMember] = useState(null)
+    const [editingMember, setEditingMember] = useState(null)
+    const [savingEdit, setSavingEdit] = useState(false)
+    const [customDomain, setCustomDomain] = useState('')
     const [resetFor, setResetFor] = useState(null)
     const [pw, setPw] = useState('')
     const [creating, setCreating] = useState(null)
@@ -175,6 +193,121 @@ export default function MembersMaster() {
         }
     }
 
+    // Open edit drawer for a member
+    const openEdit = m => {
+        const mDomains = (m.domains || []).map(d => (typeof d === 'string' ? d : d.name)).filter(Boolean)
+        setEditingMember({
+            id: m.id,
+            userId: m.userId,
+            contentId: m.contentId,
+            name: m.name || '',
+            email: m.email || '',
+            mobile: m.mobile || '',
+            regNo: m.regNo || '',
+            memberType: m.memberType || 'Core Member',
+            systemRole: m.systemRole && m.systemRole !== '—' ? m.systemRole : 'member',
+            active: m.active ?? true,
+            position: m.primaryPosition || '',
+            affiliation: m.affiliations?.[0] || 'recruited',
+            domains: mDomains,
+            avatarUrl: m.avatarUrl || '',
+            oldAvatarUrl: m.avatarUrl || '',
+            linkedin: m.linkedin || '',
+            github: m.github || '',
+            instagram: m.instagram || '',
+            website: m.website || '',
+            year: m.cmsLinks?.[0]?.year || '',
+            group: m.cmsLinks?.[0]?.group || 'Board',
+        })
+        setCustomDomain('')
+    }
+
+    // Save edited member
+    const saveEdit = async e => {
+        e.preventDefault()
+        if (!editingMember) return
+        setSavingEdit(true)
+        try {
+            await api.put(`/admin/members-master/${editingMember.id}`, editingMember)
+            toast('Member details updated successfully')
+            setEditingMember(null)
+            reload()
+        } catch (err) {
+            toast(err.message, 'error')
+        } finally {
+            setSavingEdit(false)
+        }
+    }
+
+    // Toggle a domain for the editing member
+    const toggleDomain = d => {
+        setEditingMember(prev => {
+            const list = prev.domains || []
+            const exists = list.includes(d)
+            return {
+                ...prev,
+                domains: exists ? list.filter(x => x !== d) : [...list, d],
+            }
+        })
+    }
+
+    // Add a custom domain tag
+    const addCustomDomain = () => {
+        const d = customDomain.trim()
+        if (!d) return
+        if (!editingMember.domains?.includes(d)) {
+            setEditingMember(prev => ({ ...prev, domains: [...(prev.domains || []), d] }))
+        }
+        setCustomDomain('')
+    }
+
+    // Export Excel workbook (.xlsx) with multiple sheets
+    const exportExcel = async () => {
+        const headers = [
+            'Name', 'Email', 'Position / Designation', 'Category', 'Domains',
+            'System Role', 'Registration No', 'Mobile', 'Member Type', 'Affiliations',
+            'Status', 'Photo URL', 'LinkedIn', 'GitHub', 'Instagram', 'Website',
+            'Registered At', 'Last Login',
+        ]
+        const toRow = m => [
+            m.name || '',
+            m.email || '',
+            m.primaryPosition || '',
+            m.primaryCategory || '',
+            (m.domains || []).map(d => typeof d === 'string' ? d : `${d.name}${d.status ? ` (${d.status})` : ''}`).join('; '),
+            m.isRegistered ? (m.systemRole || 'member') : 'No Account',
+            m.regNo || '',
+            m.mobile || '',
+            m.memberType || '',
+            (m.affiliations || []).join(', '),
+            m.active ? 'Active' : 'Inactive',
+            m.avatarUrl || '',
+            m.linkedin || '',
+            m.github || '',
+            m.instagram || '',
+            m.website || '',
+            m.createdAt ? fmtDate(m.createdAt) : '',
+            m.lastLoginAt ? fmtDate(m.lastLoginAt) : '',
+        ]
+
+        const masterRows = [headers, ...filteredRows.map(toRow)]
+        const recruitedRows = [headers, ...filteredRows.filter(m => m.affiliations?.includes('recruited')).map(toRow)]
+        const boardRows = [headers, ...filteredRows.filter(m => m.affiliations?.includes('board') || m.affiliations?.includes('advisory')).map(toRow)]
+        const webTeamRows = [headers, ...filteredRows.filter(m => m.affiliations?.includes('web_team')).map(toRow)]
+        const usersRows = [headers, ...filteredRows.filter(m => m.isRegistered).map(toRow)]
+
+        const sheets = [
+            { name: 'Master Directory', rows: masterRows },
+            { name: 'Recruited Core', rows: recruitedRows },
+            { name: 'Board & Advisory', rows: boardRows },
+            { name: 'Web Team', rows: webTeamRows },
+            { name: 'Users with Roles', rows: usersRows },
+        ]
+
+        await downloadXlsx(`ieee-its-members-${tab}-${new Date().toISOString().slice(0, 10)}.xlsx`, sheets)
+        toast('Excel workbook exported')
+    }
+
     // Export CSV
     const exportData = () => {
         const rows = filteredRows.map(m => ({
@@ -201,8 +334,11 @@ export default function MembersMaster() {
                 title="Members Master"
                 subtitle="Unified directory of all members, recruited candidates, board, advisory, web team, and users with roles across IEEE ITS."
             >
+                <button className="adm-btn primary" disabled={!filteredRows.length} onClick={exportExcel} title="Export directory to Excel (.xlsx)">
+                    <Icon name="download" size={15} /> Export Excel (.xlsx)
+                </button>
                 <button className="adm-btn" disabled={!filteredRows.length} onClick={exportData} title="Export directory to CSV">
-                    ⬇ Export CSV
+                    Export CSV
                 </button>
                 {isAdmin && (
                     <>
@@ -465,6 +601,13 @@ export default function MembersMaster() {
                                         {/* Actions */}
                                         <td style={{ textAlign: 'right' }} className="nowrap">
                                             <button
+                                                className="adm-btn small primary"
+                                                onClick={() => openEdit(m)}
+                                                title="Edit all details including photo, domains, position, social links"
+                                            >
+                                                <Icon name="edit" size={13} /> Edit
+                                            </button>
+                                            <button
                                                 className="adm-btn small"
                                                 onClick={() => setSelectedMember(m)}
                                                 title="View full details"
@@ -521,7 +664,7 @@ export default function MembersMaster() {
                                     {(selectedMember.name?.[0] || 'U').toUpperCase()}
                                 </span>
                             )}
-                            <div>
+                            <div style={{ flex: 1 }}>
                                 <h3 style={{ margin: '0 0 4px' }}>{selectedMember.name}</h3>
                                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
                                     {selectedMember.affiliations?.map(a => (
@@ -537,6 +680,16 @@ export default function MembersMaster() {
                                 </div>
                                 <small style={{ color: 'var(--a-muted)' }}>{selectedMember.primaryPosition}</small>
                             </div>
+                            <button
+                                className="adm-btn small primary"
+                                onClick={() => {
+                                    const m = selectedMember
+                                    setSelectedMember(null)
+                                    openEdit(m)
+                                }}
+                            >
+                                <Icon name="edit" size={13} /> Edit Details
+                            </button>
                         </div>
 
                         {/* Contact & Registration Information */}
@@ -623,7 +776,7 @@ export default function MembersMaster() {
                         )}
 
                         {/* Social Profile Links */}
-                        {(selectedMember.linkedin || selectedMember.instagram) && (
+                        {(selectedMember.linkedin || selectedMember.instagram || selectedMember.github || selectedMember.website) && (
                             <fieldset className="adm-fieldset">
                                 <legend>Social Profiles</legend>
                                 <div className="adm-row wrap" style={{ gap: 10 }}>
@@ -637,6 +790,16 @@ export default function MembersMaster() {
                                             <Icon name="external" size={14} /> LinkedIn Profile
                                         </a>
                                     )}
+                                    {selectedMember.github && (
+                                        <a
+                                            href={selectedMember.github}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="adm-btn small"
+                                        >
+                                            <Icon name="external" size={14} /> GitHub Profile
+                                        </a>
+                                    )}
                                     {selectedMember.instagram && (
                                         <a
                                             href={selectedMember.instagram}
@@ -645,6 +808,16 @@ export default function MembersMaster() {
                                             className="adm-btn small"
                                         >
                                             <Icon name="external" size={14} /> Instagram Profile
+                                        </a>
+                                    )}
+                                    {selectedMember.website && (
+                                        <a
+                                            href={selectedMember.website}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="adm-btn small"
+                                        >
+                                            <Icon name="external" size={14} /> Portfolio / Website
                                         </a>
                                     )}
                                 </div>
@@ -683,6 +856,301 @@ export default function MembersMaster() {
                             </fieldset>
                         )}
                     </div>
+                )}
+            </Drawer>
+
+            {/* Edit Member Drawer */}
+            <Drawer
+                open={!!editingMember}
+                title={editingMember ? `Edit Member · ${editingMember.name || 'Details'}` : 'Edit Member'}
+                onClose={() => setEditingMember(null)}
+                wide
+            >
+                {editingMember && (
+                    <form className="adm-form" onSubmit={saveEdit} style={{ gap: 20 }}>
+                        {/* Photo Section with Adjust & Remove */}
+                        <fieldset className="adm-fieldset">
+                            <legend>Member Photo</legend>
+                            <ImageInput
+                                value={editingMember.avatarUrl}
+                                onChange={url => setEditingMember(prev => ({ ...prev, avatarUrl: url }))}
+                            />
+                            <p className="adm-hint" style={{ marginTop: 6 }}>
+                                Upload or select from library. Click <strong>Adjust</strong> to fine-tune focal point, zoom, and frame crop. Clicking <strong>Remove</strong> immediately deletes the photo from ImageKit.
+                            </p>
+                        </fieldset>
+
+                        {/* Basic Info */}
+                        <fieldset className="adm-fieldset">
+                            <legend>Basic Information</legend>
+                            <div className="adm-grid-2">
+                                <label className="adm-field">
+                                    <span>Full Name</span>
+                                    <input
+                                        className="adm-input"
+                                        value={editingMember.name}
+                                        onChange={e => setEditingMember(prev => ({ ...prev, name: e.target.value }))}
+                                        required
+                                    />
+                                </label>
+                                <label className="adm-field">
+                                    <span>Email Address</span>
+                                    <input
+                                        className="adm-input"
+                                        type="email"
+                                        value={editingMember.email}
+                                        onChange={e => setEditingMember(prev => ({ ...prev, email: e.target.value }))}
+                                        placeholder="name@vitstudent.ac.in"
+                                    />
+                                </label>
+                            </div>
+                        </fieldset>
+
+                        {/* Position & Category */}
+                        <fieldset className="adm-fieldset">
+                            <legend>Role, Position & Affiliation</legend>
+                            <div className="adm-grid-2">
+                                <label className="adm-field">
+                                    <span>Position / Designation</span>
+                                    <input
+                                        className="adm-input"
+                                        value={editingMember.position}
+                                        onChange={e => setEditingMember(prev => ({ ...prev, position: e.target.value }))}
+                                        placeholder="e.g. Chairperson, Technical Lead, Core Member"
+                                    />
+                                </label>
+                                <label className="adm-field">
+                                    <span>Member Type</span>
+                                    <select
+                                        className="adm-input"
+                                        value={editingMember.memberType}
+                                        onChange={e => setEditingMember(prev => ({ ...prev, memberType: e.target.value }))}
+                                    >
+                                        <option value="Core Member">Core Member</option>
+                                        <option value="Internal Member">Internal Member</option>
+                                        <option value="External Member">External Member</option>
+                                        <option value="Faculty">Faculty</option>
+                                    </select>
+                                </label>
+                                <label className="adm-field">
+                                    <span>Affiliation Category</span>
+                                    <select
+                                        className="adm-input"
+                                        value={editingMember.affiliation}
+                                        onChange={e => setEditingMember(prev => ({ ...prev, affiliation: e.target.value }))}
+                                    >
+                                        <option value="recruited">Recruited Core Member</option>
+                                        <option value="board">Board Member</option>
+                                        <option value="web_team">Web Team Member</option>
+                                        <option value="advisory">Advisory Board (Past Member)</option>
+                                        <option value="faculty">Faculty Coordinator</option>
+                                        <option value="user">Registered User</option>
+                                    </select>
+                                </label>
+                                {editingMember.affiliation === 'advisory' && (
+                                    <>
+                                        <label className="adm-field">
+                                            <span>Board Year (e.g. 2024-2025)</span>
+                                            <input
+                                                className="adm-input"
+                                                value={editingMember.year}
+                                                onChange={e => setEditingMember(prev => ({ ...prev, year: e.target.value }))}
+                                                placeholder="2024-2025"
+                                            />
+                                        </label>
+                                        <label className="adm-field">
+                                            <span>Past Group</span>
+                                            <select
+                                                className="adm-input"
+                                                value={editingMember.group}
+                                                onChange={e => setEditingMember(prev => ({ ...prev, group: e.target.value }))}
+                                            >
+                                                <option value="Board">Board</option>
+                                                <option value="Web Team">Web Team</option>
+                                            </select>
+                                        </label>
+                                    </>
+                                )}
+                            </div>
+                        </fieldset>
+
+                        {/* Domains (Multi-domain mapping) */}
+                        <fieldset className="adm-fieldset">
+                            <legend>Domains Mapping (can map to multiple domains)</legend>
+                            <p className="adm-hint" style={{ margin: '0 0 10px' }}>
+                                Select all domains this member belongs to or is mapped to:
+                            </p>
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                                {STANDARD_DOMAINS.map(d => {
+                                    const isSelected = editingMember.domains?.includes(d)
+                                    return (
+                                        <button
+                                            key={d}
+                                            type="button"
+                                            className={`adm-btn small ${isSelected ? 'primary' : 'ghost'}`}
+                                            onClick={() => toggleDomain(d)}
+                                            style={{ borderRadius: 16 }}
+                                        >
+                                            {isSelected ? '✓ ' : '+ '} {d}
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                            {editingMember.domains && editingMember.domains.length > 0 && (
+                                <div style={{ marginBottom: 10 }}>
+                                    <span className="adm-hint" style={{ display: 'block', marginBottom: 4 }}>Currently mapped domains:</span>
+                                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                        {editingMember.domains.map(d => (
+                                            <span
+                                                key={d}
+                                                className="adm-badge ok"
+                                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px' }}
+                                            >
+                                                {d}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => toggleDomain(d)}
+                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0, fontSize: '0.8rem' }}
+                                                    title="Remove domain"
+                                                >
+                                                    ✕
+                                                </button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            <div className="adm-row" style={{ gap: 8 }}>
+                                <input
+                                    className="adm-input"
+                                    placeholder="Add custom domain…"
+                                    value={customDomain}
+                                    onChange={e => setCustomDomain(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomDomain() } }}
+                                    style={{ maxWidth: 240 }}
+                                />
+                                <button type="button" className="adm-btn small" onClick={addCustomDomain}>
+                                    + Add Domain
+                                </button>
+                            </div>
+                        </fieldset>
+
+                        {/* Social Media Links */}
+                        <fieldset className="adm-fieldset">
+                            <legend>Social Profiles & Links</legend>
+                            <div className="adm-grid-2">
+                                <label className="adm-field">
+                                    <span>LinkedIn URL</span>
+                                    <input
+                                        className="adm-input"
+                                        value={editingMember.linkedin}
+                                        onChange={e => setEditingMember(prev => ({ ...prev, linkedin: e.target.value }))}
+                                        placeholder="https://linkedin.com/in/username"
+                                    />
+                                </label>
+                                <label className="adm-field">
+                                    <span>GitHub URL</span>
+                                    <input
+                                        className="adm-input"
+                                        value={editingMember.github}
+                                        onChange={e => setEditingMember(prev => ({ ...prev, github: e.target.value }))}
+                                        placeholder="https://github.com/username"
+                                    />
+                                </label>
+                                <label className="adm-field">
+                                    <span>Instagram URL</span>
+                                    <input
+                                        className="adm-input"
+                                        value={editingMember.instagram}
+                                        onChange={e => setEditingMember(prev => ({ ...prev, instagram: e.target.value }))}
+                                        placeholder="https://instagram.com/username"
+                                    />
+                                </label>
+                                <label className="adm-field">
+                                    <span>Portfolio / Website URL</span>
+                                    <input
+                                        className="adm-input"
+                                        value={editingMember.website}
+                                        onChange={e => setEditingMember(prev => ({ ...prev, website: e.target.value }))}
+                                        placeholder="https://portfolio.com"
+                                    />
+                                </label>
+                            </div>
+                        </fieldset>
+
+                        {/* Contact & Registration Information */}
+                        <fieldset className="adm-fieldset">
+                            <legend>Identity & Contact Numbers</legend>
+                            <div className="adm-grid-2">
+                                <label className="adm-field">
+                                    <span>Registration Number</span>
+                                    <input
+                                        className="adm-input"
+                                        value={editingMember.regNo}
+                                        onChange={e => setEditingMember(prev => ({ ...prev, regNo: e.target.value }))}
+                                        placeholder="24BCE1001"
+                                    />
+                                </label>
+                                <label className="adm-field">
+                                    <span>Mobile Number</span>
+                                    <input
+                                        className="adm-input"
+                                        value={editingMember.mobile}
+                                        onChange={e => setEditingMember(prev => ({ ...prev, mobile: e.target.value }))}
+                                        placeholder="9876543210"
+                                    />
+                                </label>
+                            </div>
+                        </fieldset>
+
+                        {/* Account Role & Status */}
+                        <fieldset className="adm-fieldset">
+                            <legend>System Role & Account Status</legend>
+                            <div className="adm-grid-2">
+                                <label className="adm-field">
+                                    <span>System Access Role</span>
+                                    <select
+                                        className="adm-input"
+                                        value={editingMember.systemRole || 'member'}
+                                        disabled={!isAdmin || (editingMember.userId && editingMember.userId === me?.id)}
+                                        onChange={e => setEditingMember(prev => ({ ...prev, systemRole: e.target.value }))}
+                                    >
+                                        {Object.entries(ROLES).map(([k, v]) => (
+                                            <option key={k} value={k}>{v}</option>
+                                        ))}
+                                    </select>
+                                </label>
+                                <div className="adm-field">
+                                    <span>Account Status</span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+                                        <Switch
+                                            checked={editingMember.active}
+                                            onChange={v => setEditingMember(prev => ({ ...prev, active: v }))}
+                                        />
+                                        <span>{editingMember.active ? 'Active' : 'Inactive'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </fieldset>
+
+                        {/* Form actions */}
+                        <div className="adm-row end" style={{ marginTop: 10 }}>
+                            <button
+                                type="button"
+                                className="adm-btn ghost"
+                                onClick={() => setEditingMember(null)}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="adm-btn primary"
+                                disabled={savingEdit}
+                            >
+                                {savingEdit ? 'Saving…' : 'Save Changes'}
+                            </button>
+                        </div>
+                    </form>
                 )}
             </Drawer>
 

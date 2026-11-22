@@ -31,3 +31,29 @@ export async function deleteFile(fileId) {
     })
     if (!res.ok && res.status !== 404) fail(502, `ImageKit delete failed (${res.status})`)
 }
+
+export async function deleteFileByUrl(url) {
+    if (!url || !imagekitConfigured() || !/ik\.imagekit\.io/.test(url)) return false
+    const cleanUrl = url.split('?')[0]
+    const auth = Buffer.from(`${process.env.IMAGEKIT_PRIVATE_KEY}:`).toString('base64')
+    try {
+        const u = new URL(cleanUrl)
+        const fileName = u.pathname.split('/').pop()
+        if (!fileName) return false
+        const searchRes = await fetch(`https://api.imagekit.io/v1/files?name=${encodeURIComponent(fileName)}`, {
+            headers: { Authorization: `Basic ${auth}` },
+        })
+        if (!searchRes.ok) return false
+        const list = await searchRes.json()
+        if (Array.isArray(list) && list.length > 0) {
+            const match = list.find(f => f.url === cleanUrl || f.name === fileName) || list[0]
+            if (match?.fileId) {
+                await deleteFile(match.fileId)
+                return true
+            }
+        }
+    } catch (e) {
+        console.error('[imagekit] deleteFileByUrl failed for', url, e.message)
+    }
+    return false
+}

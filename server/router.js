@@ -17,7 +17,7 @@ import {
 } from './auth.js'
 import { ensureReady } from './seed.js'
 import { notifyOrder, notifyQuery, notifySubscriber, sendMail, smtpConfig, sendPasswordResetCode } from './mailer.js'
-import { uploadAuth, deleteFile, imagekitConfigured } from './imagekit.js'
+import { uploadAuth, deleteFile, deleteFileByUrl, imagekitConfigured } from './imagekit.js'
 import { DEFAULT_SETTINGS, DEFAULT_PRIVATE_SETTINGS, PUBLIC_SETTING_KEYS } from '../shared/defaults.js'
 import { cleanLayout, cleanImageStyle } from '../shared/layout.js'
 import { installRecruitment } from './recruit.js'
@@ -176,14 +176,19 @@ const imageUsage = async url => (await mediaUsage(url)).map(u => u.label)
 async function releaseImages(user, urls) {
     const db = getDb()
     for (const url of urls) {
+        if (!url) continue
         try {
-            const m = await db.first('SELECT * FROM media WHERE url = ?', [url])
-            if (!m) continue // not uploaded through this site — leave it alone
             if ((await imageUsage(url)).length) continue
-            await deleteFile(m.file_id)
-            await db.run('DELETE FROM media WHERE id = ?', [m.id])
+            const m = await db.first('SELECT * FROM media WHERE url = ?', [url])
+            if (m?.file_id) {
+                await deleteFile(m.file_id)
+                await db.run('DELETE FROM media WHERE id = ?', [m.id])
+                await audit(user, 'delete', 'media', m.id, `Removed from ImageKit (no longer used): ${m.name || url}`)
+            } else if (/ik\.imagekit\.io/.test(url)) {
+                await deleteFileByUrl(url)
+                await audit(user, 'delete', 'media', 0, `Removed from ImageKit (no longer used): ${url}`)
+            }
             await forgetImageStyle(url)
-            await audit(user, 'delete', 'media', m.id, `Removed from ImageKit (no longer used): ${m.name || url}`)
         } catch (e) {
             console.error('[media] cleanup failed for', url, e.message)
         }
@@ -1072,7 +1077,29 @@ route('DELETE', '/api/admin/media/:id', async ({ user, params }) => {
     if (usedIn.length) fail(409, `This image is still used in ${usedIn.length} place${usedIn.length > 1 ? 's' : ''}: ${usedIn.slice(0, 5).join('; ')}${usedIn.length > 5 ? '; …' : ''}. Remove it there first — it will then be deleted from ImageKit automatically.`)
     await deleteFile(m.file_id)
     await getDb().run('DELETE FROM media WHERE id = ?', [m.id])
+    await forgetImageStyle(m.url)
     await audit(user, 'delete', 'media', m.id, m.name)
+    return { ok: true }
+})
+
+route('POST', '/api/admin/media/delete-by-url', async ({ user, body }) => {
+    requireRole(user, 'editor')
+    const url = body.url
+    if (!url) fail(400, 'Image URL required')
+    const db = getDb()
+    const usedIn = await imageUsage(url)
+    if (usedIn.length && !body.force) {
+        fail(409, `This image is still used in ${usedIn.length} place(s): ${usedIn.slice(0, 3).join(', ')}`)
+    }
+    const m = await db.first('SELECT * FROM media WHERE url = ?', [url])
+    if (m?.file_id) {
+        await deleteFile(m.file_id)
+        await db.run('DELETE FROM media WHERE id = ?', [m.id])
+    } else if (/ik\.imagekit\.io/.test(url)) {
+        await deleteFileByUrl(url)
+    }
+    await forgetImageStyle(url)
+    await audit(user, 'delete', 'media', m?.id || 0, `Deleted image: ${url}`)
     return { ok: true }
 })
 
@@ -1171,6 +1198,7 @@ route('GET', '/api/admin/members-master', async ({ user }) => {
     // Process CMS items
     const parsedCms = contentItems.map(c => {
         const d = parseJson(c.data, {})
+        const rawDomains = Array.isArray(d.domains) ? d.domains : typeof d.domains === 'string' ? d.domains.split(/[,;\n]/).map(s => s.trim()).filter(Boolean) : []
         return {
             id: c.id,
             type: c.type,
@@ -1183,6 +1211,9 @@ route('GET', '/api/admin/members-master', async ({ user }) => {
             initials: d.initials || '',
             linkedin: d.linkedin || '',
             instagram: d.instagram || '',
+            github: d.github || '',
+            website: d.website || '',
+            domains: rawDomains,
             status: c.status,
             createdAt: c.created_at,
         }
@@ -1195,6 +1226,8 @@ route('GET', '/api/admin/members-master', async ({ user }) => {
     for (const u of userRows) {
         const uNameKey = (u.name || '').trim().toLowerCase()
         const apps = userApps[u.id] || []
+        const userDomains = parseJson(u.domains, [])
+        const userSocials = parseJson(u.social_links, {})
 
         // Find matching CMS entries for this user by name
         const matchedCms = parsedCms.filter(c => {
@@ -1206,18 +1239,18 @@ route('GET', '/api/admin/members-master', async ({ user }) => {
         })
 
         const affiliations = ['user']
-        let primaryPosition = ''
+        let primaryPosition = u.position || ''
         let primaryCategory = 'Registered User'
 
         // Check if recruited or applicant
         const selectedApps = apps.filter(a => a.status === 'selected')
         if (selectedApps.length > 0) {
             affiliations.push('recruited')
-            primaryPosition = `Core Member (${selectedApps.map(a => a.domain).join(', ')})`
+            if (!primaryPosition) primaryPosition = `Core Member (${selectedApps.map(a => a.domain).join(', ')})`
             primaryCategory = 'Recruited Member'
         } else if (apps.length > 0) {
             affiliations.push('applicant')
-            primaryPosition = `Applicant (${apps.map(a => `${a.domain}: ${a.status}`).join(', ')})`
+            if (!primaryPosition) primaryPosition = `Applicant (${apps.map(a => `${a.domain}: ${a.status}`).join(', ')})`
             primaryCategory = 'Applicant'
         }
 
@@ -1225,16 +1258,16 @@ route('GET', '/api/admin/members-master', async ({ user }) => {
         for (const c of matchedCms) {
             affiliations.push(c.type)
             if (c.type === 'board') {
-                primaryPosition = c.role || 'Board Member'
+                if (!u.position) primaryPosition = c.role || 'Board Member'
                 primaryCategory = 'Board Member'
             } else if (c.type === 'web_team') {
-                primaryPosition = c.role || 'Web Team'
+                if (!u.position) primaryPosition = c.role || 'Web Team'
                 primaryCategory = 'Web Team'
             } else if (c.type === 'advisory') {
-                primaryPosition = c.role || `Advisory Board (${c.year || 'Past'})`
+                if (!u.position) primaryPosition = c.role || `Advisory Board (${c.year || 'Past'})`
                 primaryCategory = `Advisory Board ${c.year ? `(${c.year})` : ''}`
             } else if (c.type === 'faculty') {
-                primaryPosition = c.role || 'Faculty Coordinator'
+                if (!u.position) primaryPosition = c.role || 'Faculty Coordinator'
                 primaryCategory = 'Faculty'
             }
         }
@@ -1243,11 +1276,25 @@ route('GET', '/api/admin/members-master', async ({ user }) => {
             primaryPosition = u.role === 'admin' ? 'Administrator' : u.role === 'editor' ? 'Editor' : 'User'
         }
 
-        const domainList = apps.map(a => ({
-            name: a.domain,
-            status: a.status,
-            score: a.score,
-        }))
+        // Merge domains from user profile, apps, and CMS
+        const domainMap = new Map()
+        for (const a of apps) {
+            domainMap.set(a.domain, { name: a.domain, status: a.status, score: a.score })
+        }
+        for (const d of userDomains) {
+            const dName = typeof d === 'string' ? d : d.name
+            if (dName && !domainMap.has(dName)) {
+                domainMap.set(dName, { name: dName, status: typeof d === 'object' ? d.status : 'assigned' })
+            }
+        }
+        for (const c of matchedCms) {
+            for (const d of c.domains || []) {
+                const dName = typeof d === 'string' ? d : d.name
+                if (dName && !domainMap.has(dName)) {
+                    domainMap.set(dName, { name: dName, status: 'assigned' })
+                }
+            }
+        }
 
         members.push({
             id: `user-${u.id}`,
@@ -1265,12 +1312,14 @@ route('GET', '/api/admin/members-master', async ({ user }) => {
             affiliations: [...new Set(affiliations)],
             primaryPosition,
             primaryCategory,
-            domains: domainList,
+            domains: Array.from(domainMap.values()),
             applications: apps,
             cmsLinks: matchedCms.map(c => ({ id: c.id, type: c.type, role: c.role, year: c.year, group: c.group })),
             avatarUrl: u.avatar_url || matchedCms.find(c => c.image)?.image || '',
-            linkedin: matchedCms.find(c => c.linkedin)?.linkedin || '',
-            instagram: matchedCms.find(c => c.instagram)?.instagram || '',
+            linkedin: userSocials.linkedin || matchedCms.find(c => c.linkedin)?.linkedin || '',
+            instagram: userSocials.instagram || matchedCms.find(c => c.instagram)?.instagram || '',
+            github: userSocials.github || matchedCms.find(c => c.github)?.github || '',
+            website: userSocials.website || matchedCms.find(c => c.website)?.website || '',
         })
     }
 
@@ -1284,6 +1333,8 @@ route('GET', '/api/admin/members-master', async ({ user }) => {
         else if (c.type === 'web_team') { cat = 'Web Team'; pos = pos || 'Web Team Member' }
         else if (c.type === 'advisory') { cat = `Advisory Board ${c.year ? `(${c.year})` : ''}`; pos = pos || 'Past Member' }
         else if (c.type === 'faculty') { cat = 'Faculty'; pos = pos || 'Faculty Coordinator' }
+
+        const cmsDomains = (c.domains || []).map(d => (typeof d === 'string' ? { name: d, status: 'assigned' } : d))
 
         members.push({
             id: `cms-${c.type}-${c.id}`,
@@ -1301,16 +1352,226 @@ route('GET', '/api/admin/members-master', async ({ user }) => {
             affiliations: [c.type],
             primaryPosition: pos || '—',
             primaryCategory: cat,
-            domains: [],
+            domains: cmsDomains,
             applications: [],
             cmsLinks: [{ id: c.id, type: c.type, role: c.role, year: c.year, group: c.group }],
             avatarUrl: c.image || '',
             linkedin: c.linkedin || '',
             instagram: c.instagram || '',
+            github: c.github || '',
+            website: c.website || '',
         })
     }
 
     return { items: members }
+})
+
+route('PUT', '/api/admin/members-master/:id', async ({ user, params, body }) => {
+    requireRole(user, 'editor')
+    const db = getDb()
+    const id = String(params.id)
+    const {
+        name,
+        email,
+        mobile,
+        regNo,
+        memberType,
+        systemRole,
+        active,
+        position,
+        domains,
+        avatarUrl,
+        oldAvatarUrl,
+        linkedin,
+        instagram,
+        github,
+        website,
+        year,
+        group,
+    } = body
+
+    const cleanDomains = Array.isArray(domains) ? domains.map(d => (typeof d === 'string' ? d : d?.name)).filter(Boolean) : []
+    const socials = {
+        linkedin: (linkedin || '').trim(),
+        instagram: (instagram || '').trim(),
+        github: (github || '').trim(),
+        website: (website || '').trim(),
+    }
+
+    // If photo was changed or removed, delete old photo from ImageKit
+    if (oldAvatarUrl && oldAvatarUrl !== avatarUrl) {
+        await releaseImages(user, [oldAvatarUrl])
+    }
+
+    if (id.startsWith('user-')) {
+        const userId = Number(id.replace('user-', ''))
+        const existing = await db.first('SELECT * FROM users WHERE id = ?', [userId])
+        if (!existing) fail(404, 'User not found')
+
+        await db.run(`
+            UPDATE users SET
+                name = ?, mobile = ?, reg_no = ?, member_type = ?,
+                avatar_url = ?, position = ?, domains = ?, social_links = ?,
+                active = ?, role = ?, updated_at = datetime('now')
+            WHERE id = ?
+        `, [
+            name || existing.name,
+            mobile ?? existing.mobile,
+            regNo ?? existing.reg_no,
+            memberType ?? existing.member_type,
+            avatarUrl !== undefined ? avatarUrl : existing.avatar_url,
+            position !== undefined ? position : existing.position,
+            JSON.stringify(cleanDomains),
+            JSON.stringify(socials),
+            active !== undefined ? (active ? 1 : 0) : existing.active,
+            (systemRole && ['member', 'editor', 'admin'].includes(systemRole)) ? systemRole : existing.role,
+            userId,
+        ])
+
+        if (email && email.toLowerCase() !== existing.email.toLowerCase()) {
+            if (isEmail(email)) {
+                await db.run('UPDATE users SET email = ? WHERE id = ?', [email.toLowerCase(), userId]).catch(() => {})
+            }
+        }
+
+        // Sync any matching CMS items for this user by name
+        const cmsItems = await db.all("SELECT id, type, data FROM content WHERE type IN ('board', 'web_team', 'advisory', 'faculty')")
+        for (const item of cmsItems) {
+            const d = parseJson(item.data, {})
+            if (d.name && d.name.trim().toLowerCase() === existing.name.trim().toLowerCase()) {
+                const beforeData = { ...d }
+                d.name = name || d.name
+                if (position !== undefined) d.role = position
+                if (avatarUrl !== undefined) d.image = avatarUrl
+                if (socials.linkedin !== undefined) d.linkedin = socials.linkedin
+                if (socials.instagram !== undefined) d.instagram = socials.instagram
+                if (socials.github !== undefined) d.github = socials.github
+                if (socials.website !== undefined) d.website = socials.website
+                d.domains = cleanDomains
+                await db.run("UPDATE content SET data = ?, updated_at = datetime('now') WHERE id = ?", [JSON.stringify(d), item.id])
+                await releaseImages(user, dropped(imageUrls(beforeData), imageUrls(d)))
+            }
+        }
+
+        await audit(user, 'update', 'users', userId, `Updated member profile: ${name || existing.name}`)
+        return { ok: true }
+    } else if (id.startsWith('cms-')) {
+        const parts = id.split('-')
+        const contentId = Number(parts[parts.length - 1])
+        const item = await db.first('SELECT * FROM content WHERE id = ?', [contentId])
+        if (!item) fail(404, 'CMS entry not found')
+
+        const d = parseJson(item.data, {})
+        const beforeData = { ...d }
+        d.name = name || d.name
+        if (position !== undefined) d.role = position
+        if (avatarUrl !== undefined) d.image = avatarUrl
+        if (socials.linkedin !== undefined) d.linkedin = socials.linkedin
+        if (socials.instagram !== undefined) d.instagram = socials.instagram
+        if (socials.github !== undefined) d.github = socials.github
+        if (socials.website !== undefined) d.website = socials.website
+        d.domains = cleanDomains
+        if (year !== undefined) d.year = year
+        if (group !== undefined) d.group = group
+
+        await db.run("UPDATE content SET data = ?, updated_at = datetime('now') WHERE id = ?", [JSON.stringify(d), contentId])
+        await releaseImages(user, dropped(imageUrls(beforeData), imageUrls(d)))
+
+        if (email && isEmail(email)) {
+            const existingUser = await db.first('SELECT id FROM users WHERE email = ?', [email.toLowerCase()])
+            if (existingUser) {
+                await db.run(`
+                    UPDATE users SET
+                        name = ?, mobile = ?, reg_no = ?, member_type = ?,
+                        avatar_url = ?, position = ?, domains = ?, social_links = ?,
+                        updated_at = datetime('now')
+                    WHERE id = ?
+                `, [
+                    name, mobile || '', regNo || '', memberType || 'External Member',
+                    avatarUrl || '', position || '', JSON.stringify(cleanDomains),
+                    JSON.stringify(socials), existingUser.id,
+                ])
+            }
+        }
+
+        await audit(user, 'update', item.type, contentId, `Updated member: ${name}`)
+        return { ok: true }
+    }
+
+    fail(400, 'Invalid member ID')
+})
+
+route('POST', '/api/admin/members-master', async ({ user, body }) => {
+    requireRole(user, 'editor')
+    const db = getDb()
+    const {
+        name,
+        email,
+        mobile,
+        regNo,
+        memberType,
+        systemRole,
+        position,
+        affiliation,
+        domains,
+        avatarUrl,
+        linkedin,
+        instagram,
+        github,
+        website,
+        year,
+        group,
+    } = body
+
+    if (!name?.trim()) fail(400, 'Name is required')
+    const cleanDomains = Array.isArray(domains) ? domains.map(d => (typeof d === 'string' ? d : d?.name)).filter(Boolean) : []
+    const socials = {
+        linkedin: (linkedin || '').trim(),
+        instagram: (instagram || '').trim(),
+        github: (github || '').trim(),
+        website: (website || '').trim(),
+    }
+
+    // Determine target collection based on affiliation
+    const aff = affiliation || 'recruited'
+    let contentId = null
+    if (['board', 'web_team', 'advisory', 'faculty'].includes(aff)) {
+        const payload = {
+            name: name.trim(),
+            role: position || (aff === 'board' ? 'Board Member' : aff === 'web_team' ? 'Web Team Member' : 'Member'),
+            image: avatarUrl || '',
+            domains: cleanDomains,
+            linkedin: socials.linkedin,
+            instagram: socials.instagram,
+            github: socials.github,
+            website: socials.website,
+        }
+        if (aff === 'advisory') {
+            payload.year = year || `${new Date().getFullYear() - 1}-${new Date().getFullYear()}`
+            payload.group = group || 'Board'
+        }
+        const r = await db.run("INSERT INTO content (type, data, status, sort_order) VALUES (?, ?, 'published', 0)", [aff, JSON.stringify(payload)])
+        contentId = r.lastId
+    }
+
+    // If email provided or affiliation is user/recruited, create or link user account
+    if (email && isEmail(email)) {
+        const existing = await db.first('SELECT id FROM users WHERE email = ?', [email.toLowerCase()])
+        if (!existing) {
+            const role = (systemRole && ['member', 'editor', 'admin'].includes(systemRole)) ? systemRole : 'member'
+            await db.run(`
+                INSERT INTO users (name, email, password_hash, role, mobile, reg_no, member_type, avatar_url, position, domains, social_links)
+                VALUES (?, ?, 'invited', ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+                name.trim(), email.toLowerCase(), role, mobile || '', regNo || '',
+                memberType || (aff === 'recruited' ? 'Core Member' : 'External Member'),
+                avatarUrl || '', position || '', JSON.stringify(cleanDomains), JSON.stringify(socials),
+            ])
+        }
+    }
+
+    await audit(user, 'create', 'members_master', contentId || 0, `Created member: ${name.trim()}`)
+    return { ok: true }
 })
 
 /* ── admin: users ── */
