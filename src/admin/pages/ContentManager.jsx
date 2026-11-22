@@ -40,7 +40,7 @@ function strip(item) {
     return data
 }
 
-function Row({ item, def, onEdit, onToggle, onDuplicate, onDelete, onEmail }) {
+function Row({ item, def, onEdit, onToggle, onDuplicate, onDelete, onEmail, onMoveToAdvisory }) {
     const controls = useDragControls()
     const now = new Date().toISOString().slice(0, 16)
     const scheduled = (item._starts_at && toLocalInput(item._starts_at) > now) ? 'Scheduled' : (item._ends_at && toLocalInput(item._ends_at) < now) ? 'Expired' : null
@@ -57,6 +57,11 @@ function Row({ item, def, onEdit, onToggle, onDuplicate, onDelete, onEmail }) {
             <Switch checked={item._status === 'published'} onChange={onToggle} label={item._status === 'published' ? 'Live' : 'Draft'} />
             <div className="adm-row">
                 <button className="adm-btn small" onClick={onEdit}>Edit</button>
+                {onMoveToAdvisory && (
+                    <button className="adm-btn small ghost" onClick={onMoveToAdvisory} title="Make as Advisory Board">
+                        <Icon name="award" size={14} /> Advisory
+                    </button>
+                )}
                 {onEmail && <button className="adm-btn small ghost" onClick={onEmail} title="Email this to users"><Icon name="send" size={14} /> Email</button>}
                 <button className="adm-btn small ghost" onClick={onDuplicate} title="Duplicate" aria-label="Duplicate"><Icon name="copy" size={16} /></button>
                 <button className="adm-btn small ghost danger-text" onClick={onDelete} title="Delete" aria-label="Delete"><Icon name="trash" size={16} /></button>
@@ -76,6 +81,57 @@ export default function ContentManager({ type }) {
     const [announcing, setAnnouncing] = useState(null)
     const [saving, setSaving] = useState(false)
     const [q, setQ] = useState('')
+
+    const [advisoryModal, setAdvisoryModal] = useState(null) // { all: boolean, item?: object }
+    const [advisoryYear, setAdvisoryYear] = useState('')
+    const [advisoryKeepCopy, setAdvisoryKeepCopy] = useState(false)
+    const [advisoryBusy, setAdvisoryBusy] = useState(false)
+    const [advisoryErr, setAdvisoryErr] = useState('')
+
+    const currentYr = new Date().getFullYear()
+    const suggestedYears = useMemo(() => [
+        `${currentYr - 1}-${currentYr}`,
+        `${currentYr}-${currentYr + 1}`,
+        `${currentYr - 2}-${currentYr - 1}`,
+    ], [currentYr])
+
+    const openAdvisoryModal = ({ all = false, item = null }) => {
+        setAdvisoryErr('')
+        setAdvisoryKeepCopy(false)
+        setAdvisoryYear(suggestedYears[0])
+        setAdvisoryModal({ all, item })
+    }
+
+    const handleMoveToAdvisory = async e => {
+        e.preventDefault()
+        const yr = advisoryYear.trim()
+        if (!yr) return setAdvisoryErr('Please enter the board year (e.g. 2024-2025).')
+        setAdvisoryBusy(true)
+        setAdvisoryErr('')
+        try {
+            if (advisoryModal.all) {
+                const res = await api.post('/admin/board/move-to-advisory', { all: true, year: yr, keepCopy: advisoryKeepCopy })
+                if (!advisoryKeepCopy) {
+                    setData([])
+                    setEditing(null)
+                }
+                toast(res.message || `Moved all board members to Advisory Board (${yr}).`)
+            } else {
+                const res = await api.post('/admin/board/move-to-advisory', { id: advisoryModal.item.id, year: yr, keepCopy: advisoryKeepCopy })
+                if (!advisoryKeepCopy) {
+                    setData(list => list.filter(x => x.id !== advisoryModal.item.id))
+                    if (editing?.id === advisoryModal.item.id) setEditing(null)
+                }
+                toast(res.message || `Moved "${advisoryModal.item.name}" to Advisory Board (${yr}).`)
+            }
+            setAdvisoryModal(null)
+            afterChange()
+        } catch (err) {
+            setAdvisoryErr(err.message || 'Failed to move to Advisory Board.')
+        } finally {
+            setAdvisoryBusy(false)
+        }
+    }
 
     const isProtected = target => type === 'web_team' && /likhith/i.test(typeof target === 'string' ? target : JSON.stringify(target || ''))
     const [pwPrompt, setPwPrompt] = useState(null)
@@ -225,8 +281,23 @@ export default function ContentManager({ type }) {
         <>
             <PageTitle title={def.label} subtitle={def.help}>
                 <input className="adm-input search" placeholder="Search…" value={q} onChange={e => setQ(e.target.value)} />
+                {type === 'board' && (
+                    <button
+                        className="adm-btn ghost"
+                        onClick={() => openAdvisoryModal({ all: true })}
+                        disabled={items.length === 0}
+                        title="Make all current board as Advisory Board and keep current blank"
+                    >
+                        <Icon name="award" size={16} /> Make all Advisory Board
+                    </button>
+                )}
                 <button className="adm-btn primary" onClick={() => setEditing({ data: blank(def), status: 'published' })}><Icon name="plus" size={16} /> Add {def.singular}</button>
             </PageTitle>
+            {type === 'board' && (
+                <p className="adm-hint" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                    <Icon name="award" size={14} /> <span><strong>Tenure Transition:</strong> Use <strong>"Advisory"</strong> on a member or <strong>"Make all Advisory Board"</strong> above to graduate board members to the Advisory Board under a specific year and clear the current board.</span>
+                </p>
+            )}
             {type === 'magazines' && liveSettings?.blogs?.magazineEnabled === false && (
                 <p className="adm-hint warn">The Magazines section is switched off, so these magazines are not shown on the website. <Link to="/admin/s/blogs">Turn it on in Blogs Page settings</Link>.</p>
             )}
@@ -243,7 +314,8 @@ export default function ContentManager({ type }) {
                         <Row key={item.id} item={item} def={def}
                             onEdit={() => handleEdit(item)}
                             onToggle={on => handleToggle(item, on)} onDuplicate={() => duplicate(item)} onDelete={() => handleRemove(item)}
-                            onEmail={ANNOUNCE[type] ? () => setAnnouncing(item) : undefined} />
+                            onEmail={ANNOUNCE[type] ? () => setAnnouncing(item) : undefined}
+                            onMoveToAdvisory={type === 'board' ? () => openAdvisoryModal({ item }) : undefined} />
                     ))}
                 </Reorder.Group>
             )}
@@ -254,6 +326,11 @@ export default function ContentManager({ type }) {
             <Drawer open={!!editing} title={`${editing?.id ? 'Edit' : 'New'} ${def.singular}`} onClose={() => setEditing(null)}
                 preview={editing && <PreviewFrame path={path} patch={patch} focus={PREVIEW_FOCUS[type]} />}
                 footer={<>
+                    {type === 'board' && editing?.id && (
+                        <button type="button" className="adm-btn ghost" onClick={() => { const it = { id: editing.id, ...editing.data }; openAdvisoryModal({ item: it }) }} title="Make as Advisory Board">
+                            <Icon name="award" size={14} /> Make Advisory Board
+                        </button>
+                    )}
                     <select className="adm-input" value={editing?.status || 'published'} onChange={e => setEditing(s => ({ ...s, status: e.target.value }))} style={{ maxWidth: 160 }}>
                         <option value="published">Published</option><option value="draft">Draft</option>
                     </select>
@@ -293,6 +370,60 @@ export default function ContentManager({ type }) {
                         <div className="adm-row end" style={{ marginTop: 20 }}>
                             <button type="button" className="adm-btn ghost" onClick={() => setPwPrompt(null)}>Cancel</button>
                             <button type="submit" className="adm-btn primary" disabled={pwBusy}>{pwBusy ? 'Verifying…' : 'Confirm'}</button>
+                        </div>
+                    </form>
+                )}
+            </Modal>
+
+            <Modal open={!!advisoryModal} onClose={() => setAdvisoryModal(null)} title={advisoryModal?.all ? 'Make All Advisory Board' : `Make "${advisoryModal?.item?.name || 'Board Member'}" Advisory Board`}>
+                {advisoryModal && (
+                    <form className="adm-form" onSubmit={handleMoveToAdvisory}>
+                        <p style={{ margin: '0 0 16px', color: 'var(--adm-muted)' }}>
+                            {advisoryModal.all
+                                ? `Transfer all ${items.length} active board members to the Advisory Board under the selected tenure year, and keep the current board blank for the new board.`
+                                : `Transfer ${advisoryModal.item?.name || 'this member'} (${advisoryModal.item?.role || 'Board'}) into the Advisory Board under the selected tenure year.`
+                            }
+                        </p>
+                        <label className="adm-field">
+                            <span>Board Tenure Year (required)</span>
+                            <input
+                                className="adm-input"
+                                type="text"
+                                placeholder="e.g. 2024-2025"
+                                value={advisoryYear}
+                                onChange={e => setAdvisoryYear(e.target.value)}
+                                autoFocus
+                                required
+                            />
+                        </label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '8px 0 16px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '.8rem', color: 'var(--adm-muted)' }}>Suggested:</span>
+                            {suggestedYears.map(sy => (
+                                <button
+                                    key={sy}
+                                    type="button"
+                                    className="adm-btn small ghost"
+                                    style={{ padding: '2px 8px', fontSize: '.75rem', height: 'auto' }}
+                                    onClick={() => setAdvisoryYear(sy)}
+                                >
+                                    {sy}
+                                </button>
+                            ))}
+                        </div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '12px 0 16px', fontSize: '.9rem', cursor: 'pointer' }}>
+                            <input
+                                type="checkbox"
+                                checked={!advisoryKeepCopy}
+                                onChange={e => setAdvisoryKeepCopy(!e.target.checked)}
+                            />
+                            <span>{advisoryModal.all ? 'Keep current board blank (clears active board)' : 'Remove from active board'}</span>
+                        </label>
+                        {advisoryErr && <p className="adm-err" role="alert">{advisoryErr}</p>}
+                        <div className="adm-row end" style={{ marginTop: 20 }}>
+                            <button type="button" className="adm-btn ghost" onClick={() => setAdvisoryModal(null)}>Cancel</button>
+                            <button type="submit" className="adm-btn primary" disabled={advisoryBusy}>
+                                {advisoryBusy ? 'Moving…' : advisoryModal.all ? 'Confirm & Make All Advisory Board' : 'Confirm & Move to Advisory'}
+                            </button>
                         </div>
                     </form>
                 )}

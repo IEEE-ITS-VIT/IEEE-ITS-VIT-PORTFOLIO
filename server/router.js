@@ -673,6 +673,82 @@ route('DELETE', '/api/admin/content/:type/:id', async ({ req, user, params, body
     return { ok: true }
 })
 
+/* ── Move Board Member(s) to Advisory Board ── */
+route('POST', '/api/admin/board/move-to-advisory', async ({ user, body }) => {
+    requireRole(user, 'editor')
+    const db = getDb()
+    const year = String(body?.year || '').trim()
+    if (!year) fail(400, 'Board year is required (e.g. 2024-2025).')
+    const keepCopy = !!body?.keepCopy
+
+    if (body?.all) {
+        const boardRows = await db.all("SELECT * FROM content WHERE type = 'board' ORDER BY sort_order ASC, id ASC")
+        if (!boardRows.length) return { ok: true, count: 0, message: 'No board members to move.' }
+
+        const maxAdv = await db.first("SELECT COALESCE(MAX(sort_order), -1) AS m FROM content WHERE type = 'advisory'")
+        let sortOrder = (maxAdv?.m ?? -1) + 1
+
+        for (const row of boardRows) {
+            const b = parseJson(row.data, {})
+            const advData = {
+                year,
+                group: 'Board',
+                name: b.name || '',
+                role: b.role || '',
+                initials: b.initials || '',
+                image: b.image || '',
+                focus: b.focus || '',
+                linkedin: b.linkedin || '',
+                instagram: b.instagram || ''
+            }
+            await db.run(
+                "INSERT INTO content (type, data, sort_order, status, starts_at, ends_at) VALUES ('advisory', ?, ?, 'published', null, null)",
+                [JSON.stringify(advData), sortOrder++]
+            )
+        }
+
+        if (!keepCopy) {
+            await db.run("DELETE FROM content WHERE type = 'board'")
+        }
+
+        await audit(user, 'move_to_advisory', 'board', 'all', `Moved ${boardRows.length} board members to Advisory Board (${year})`)
+        return { ok: true, count: boardRows.length, year, message: `Moved ${boardRows.length} board members to Advisory Board (${year}). Current board is now blank.` }
+    }
+
+    const id = Number(body?.id)
+    if (!id) fail(400, 'Board member id is required.')
+    const row = await db.first("SELECT * FROM content WHERE id = ? AND type = 'board'", [id])
+    if (!row) fail(404, 'Board member not found.')
+
+    const b = parseJson(row.data, {})
+    const advData = {
+        year,
+        group: 'Board',
+        name: b.name || '',
+        role: b.role || '',
+        initials: b.initials || '',
+        image: b.image || '',
+        focus: b.focus || '',
+        linkedin: b.linkedin || '',
+        instagram: b.instagram || ''
+    }
+
+    const maxAdv = await db.first("SELECT COALESCE(MAX(sort_order), -1) AS m FROM content WHERE type = 'advisory'")
+    const sortOrder = (maxAdv?.m ?? -1) + 1
+
+    const r = await db.run(
+        "INSERT INTO content (type, data, sort_order, status, starts_at, ends_at) VALUES ('advisory', ?, ?, 'published', null, null)",
+        [JSON.stringify(advData), sortOrder]
+    )
+
+    if (!keepCopy) {
+        await db.run("DELETE FROM content WHERE id = ? AND type = 'board'", [id])
+    }
+
+    await audit(user, 'move_to_advisory', 'board', String(id), `Moved "${b.name}" to Advisory Board (${year})`)
+    return { ok: true, id: r.lastId, count: 1, year, message: `Moved "${b.name}" to Advisory Board (${year}).` }
+})
+
 /*
  * "New blog post / new magazine issue" emails. Audience: every active registered user, newsletter
  * subscribers, and/or custom addresses (separated by spaces, commas or new lines), de-duplicated.

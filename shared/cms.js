@@ -164,6 +164,7 @@ export const CONTENT_TYPES = {
             { name: 'group', label: 'Group', type: 'select', options: ['Board', 'Web Team'] },
             { name: 'name', label: 'Name', type: 'text' },
             { name: 'role', label: 'Position', type: 'text' },
+            { name: 'initials', label: 'Initials (fallback)', type: 'text' },
             { name: 'image', label: 'Photo', type: 'image' },
             { name: 'focus', label: 'Photo focus (CSS position, e.g. "50% 20%")', type: 'text', help: 'Fine-tune the crop so faces line up across all cards.' },
             { name: 'linkedin', label: 'LinkedIn URL', type: 'url' },
