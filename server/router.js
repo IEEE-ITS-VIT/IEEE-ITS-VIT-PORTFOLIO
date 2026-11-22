@@ -74,7 +74,6 @@ function cleanField(field, value) {
             name: str(o.name, 120),
             role: str(o.role, 120),
             linkedin: safeUrl(o.linkedin),
-            image: safeUrl(o.image)
         })).filter(o => o.name)
         case 'date': return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) ? value : null
         case 'event': return value ? Number(value) || null : null
@@ -846,7 +845,6 @@ function prepareEvent(body) {
             name: str(o.name, 120),
             role: str(o.role, 120),
             linkedin: safeUrl(o.linkedin),
-            image: safeUrl(o.image)
         })).filter(o => o.name)
     }
     return { ...e, status: body.status === 'draft' ? 'draft' : 'published' }

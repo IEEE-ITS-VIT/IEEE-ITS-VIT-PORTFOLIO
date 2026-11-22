@@ -362,109 +362,142 @@ function RowsInput({ field, value = [], onChange }) {
 /* ---------- Per-page SEO ---------- */
 /* ---------- Organizers (Event team members with LinkedIn) ---------- */
 function OrganizersInput({ value = [], onChange }) {
-    const [directory, setDirectory] = useState([])
-    const [loadingDir, setLoadingDir] = useState(false)
-    const [addingNew, setAddingNew] = useState(false)
-    const [newMem, setNewMem] = useState({ name: '', role: '', linkedin: '', image: '' })
-    const [savingMem, setSavingMem] = useState(false)
-    const [selectedId, setSelectedId] = useState('')
+    const [adding, setAdding] = useState(false)
+    const [entry, setEntry] = useState({ name: '', role: '', linkedin: '' })
 
-    const loadDirectory = () => {
-        setLoadingDir(true)
-        api.get('/admin/organizers')
-            .then(r => setDirectory(r.items || []))
-            .catch(() => {})
-            .finally(() => setLoadingDir(false))
+    const add = e => {
+        e?.preventDefault()
+        if (!entry.name.trim()) return
+        onChange([...value, { name: entry.name.trim(), role: entry.role.trim(), linkedin: entry.linkedin.trim() }])
+        setEntry({ name: '', role: '', linkedin: '' })
+        setAdding(false)
     }
 
-    useEffect(() => { loadDirectory() }, [])
-
-    const addFromDirectory = id => {
-        const found = directory.find(m => String(m.id) === String(id))
-        if (!found) return
-        if (value.some(o => o.name === found.name)) return
-        onChange([...value, { name: found.name, role: found.role || '', linkedin: found.linkedin || '', image: found.image || '' }])
-        setSelectedId('')
-    }
-
-    const saveAndAddNew = async e => {
-        e.preventDefault()
-        if (!newMem.name.trim()) return
-        setSavingMem(true)
-        try {
-            const { item } = await api.post('/admin/organizers', newMem)
-            setDirectory(list => [...list, item].sort((a, b) => a.name.localeCompare(b.name)))
-            onChange([...value, { name: item.name, role: item.role || '', linkedin: item.linkedin || '', image: item.image || '' }])
-            setNewMem({ name: '', role: '', linkedin: '', image: '' })
-            setAddingNew(false)
-        } catch (err) {
-            alert(err.message)
-        } finally {
-            setSavingMem(false)
-        }
+    const update = (i, key, val) => {
+        onChange(value.map((o, idx) => (idx === i ? { ...o, [key]: val } : o)))
     }
 
     const remove = i => {
         onChange(value.filter((_, idx) => idx !== i))
     }
 
+    const move = (i, dir) => {
+        const j = i + dir
+        if (j < 0 || j >= value.length) return
+        const next = [...value]
+        const temp = next[i]
+        next[i] = next[j]
+        next[j] = temp
+        onChange(next)
+    }
+
     return (
-        <div className="adm-organizers-field" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div className="adm-organizers-selected" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {value.length === 0 ? (
-                    <span className="adm-hint" style={{ margin: 0 }}>No organizers added yet. Select from the directory or add a new member below.</span>
-                ) : (
-                    value.map((org, i) => (
-                        <div key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 12px', background: 'var(--adm-surface-2, rgba(255,255,255,0.06))', borderRadius: 999, border: '1px solid var(--adm-line, rgba(255,255,255,0.12))', fontSize: '.82rem' }}>
-                            {org.image && <img src={thumb(org.image)} alt="" style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover' }} />}
-                            <strong>{org.name}</strong>
-                            {org.role && <small style={{ color: 'var(--adm-muted)' }}>· {org.role}</small>}
-                            {org.linkedin && (
-                                <a href={org.linkedin} target="_blank" rel="noreferrer" title="LinkedIn" style={{ color: '#0077b5', display: 'inline-flex', alignItems: 'center' }}>
-                                    <Icon name="external" size={13} />
-                                </a>
-                            )}
-                            <button type="button" onClick={() => remove(i)} style={{ background: 'none', border: 'none', color: 'var(--adm-muted)', cursor: 'pointer', padding: 0, marginLeft: 4 }} title="Remove">✕</button>
-                        </div>
-                    ))
-                )}
-            </div>
+        <div className="adm-organizers-field" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {value.length === 0 && !adding && (
+                <p className="adm-hint" style={{ margin: 0 }}>No organizers added yet. Add team members with their LinkedIn profile.</p>
+            )}
 
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 4 }}>
-                <select
-                    className="adm-input"
-                    value={selectedId}
-                    onChange={e => { setSelectedId(e.target.value); if (e.target.value) addFromDirectory(e.target.value); }}
-                    style={{ flex: 1 }}
-                >
-                    <option value="">{loadingDir ? 'Loading members…' : 'Select member with LinkedIn from directory…'}</option>
-                    {directory.map(m => (
-                        <option key={m.id} value={m.id}>
-                            {m.name} {m.role ? `(${m.role})` : ''} {m.linkedin ? '🔗 LinkedIn' : ''}
-                        </option>
-                    ))}
-                </select>
-                <button type="button" className="adm-btn small ghost" onClick={() => setAddingNew(a => !a)}>
-                    {addingNew ? 'Cancel' : '＋ Add new member'}
-                </button>
-            </div>
+            {value.map((org, i) => (
+                <div key={i} className="adm-row" style={{ gap: 8, alignItems: 'center' }}>
+                    <input
+                        className="adm-input"
+                        placeholder="Member Name *"
+                        value={org.name || ''}
+                        onChange={e => update(i, 'name', e.target.value)}
+                        style={{ flex: 1.2 }}
+                    />
+                    <input
+                        className="adm-input"
+                        placeholder="Role / Designation"
+                        value={org.role || ''}
+                        onChange={e => update(i, 'role', e.target.value)}
+                        style={{ flex: 1 }}
+                    />
+                    <input
+                        className="adm-input"
+                        placeholder="LinkedIn URL (https://…)"
+                        value={org.linkedin || ''}
+                        onChange={e => update(i, 'linkedin', e.target.value)}
+                        style={{ flex: 1.5 }}
+                    />
+                    <button
+                        type="button"
+                        className="adm-icon-btn"
+                        onClick={() => move(i, -1)}
+                        disabled={i === 0}
+                        aria-label="Move up"
+                        title="Move up"
+                    >
+                        ↑
+                    </button>
+                    <button
+                        type="button"
+                        className="adm-icon-btn"
+                        onClick={() => move(i, 1)}
+                        disabled={i === value.length - 1}
+                        aria-label="Move down"
+                        title="Move down"
+                    >
+                        ↓
+                    </button>
+                    <button
+                        type="button"
+                        className="adm-icon-btn"
+                        onClick={() => remove(i)}
+                        aria-label="Remove"
+                        title="Remove"
+                    >
+                        ✕
+                    </button>
+                </div>
+            ))}
 
-            {addingNew && (
-                <div style={{ padding: 14, background: 'var(--adm-surface-2, rgba(255,255,255,0.04))', borderRadius: 8, border: '1px dashed var(--adm-line, rgba(255,255,255,0.15))', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ fontSize: '.8rem', fontWeight: 600 }}>Add new member with LinkedIn to directory</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                        <input className="adm-input" placeholder="Member Name *" value={newMem.name} onChange={e => setNewMem(m => ({ ...m, name: e.target.value }))} required />
-                        <input className="adm-input" placeholder="Role / Designation (e.g. Lead Organizer)" value={newMem.role} onChange={e => setNewMem(m => ({ ...m, role: e.target.value }))} />
+            {adding ? (
+                <form onSubmit={add} style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, background: 'var(--a-panel, rgba(255,255,255,0.03))', borderRadius: 8, border: '1px dashed var(--a-border, rgba(255,255,255,0.15))' }}>
+                    <div style={{ fontSize: '.8rem', fontWeight: 600 }}>Add organizer</div>
+                    <div className="adm-row" style={{ gap: 8 }}>
+                        <input
+                            className="adm-input"
+                            placeholder="Member Name *"
+                            value={entry.name}
+                            onChange={e => setEntry(s => ({ ...s, name: e.target.value }))}
+                            style={{ flex: 1.2 }}
+                            autoFocus
+                            required
+                        />
+                        <input
+                            className="adm-input"
+                            placeholder="Role (e.g. Lead Organizer)"
+                            value={entry.role}
+                            onChange={e => setEntry(s => ({ ...s, role: e.target.value }))}
+                            style={{ flex: 1 }}
+                        />
+                        <input
+                            className="adm-input"
+                            placeholder="LinkedIn URL (https://linkedin.com/in/…)"
+                            value={entry.linkedin}
+                            onChange={e => setEntry(s => ({ ...s, linkedin: e.target.value }))}
+                            style={{ flex: 1.5 }}
+                        />
                     </div>
-                    <input className="adm-input" placeholder="LinkedIn Profile URL (https://linkedin.com/in/…)" value={newMem.linkedin} onChange={e => setNewMem(m => ({ ...m, linkedin: e.target.value }))} />
-                    <input className="adm-input" placeholder="Photo URL (optional)" value={newMem.image} onChange={e => setNewMem(m => ({ ...m, image: e.target.value }))} />
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                        <button type="button" className="adm-btn small ghost" onClick={() => setAddingNew(false)}>Cancel</button>
-                        <button type="button" className="adm-btn small primary" disabled={savingMem || !newMem.name.trim()} onClick={saveAndAddNew}>
-                            {savingMem ? 'Saving…' : 'Save to Directory & Add'}
+                    <div className="adm-row end" style={{ gap: 8 }}>
+                        <button type="button" className="adm-btn small ghost" onClick={() => { setAdding(false); setEntry({ name: '', role: '', linkedin: '' }) }}>
+                            Cancel
+                        </button>
+                        <button type="submit" className="adm-btn small primary" disabled={!entry.name.trim()}>
+                            Add
                         </button>
                     </div>
-                </div>
+                </form>
+            ) : (
+                <button
+                    type="button"
+                    className="adm-btn small"
+                    onClick={() => setAdding(true)}
+                    style={{ alignSelf: 'flex-start' }}
+                >
+                    <Icon name="plus" size={14} /> Add organizer
+                </button>
             )}
         </div>
     )

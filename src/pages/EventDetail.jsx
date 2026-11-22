@@ -59,19 +59,25 @@ export default function EventDetail({ slug: fixedSlug }) {
                                     <span>Organized by</span>
                                     <div className="facts-orgs-list">
                                         {x.organizers.map((org, i) => (
-                                            <a
-                                                key={i}
-                                                href={org.linkedin || '#'}
-                                                target={org.linkedin ? '_blank' : undefined}
-                                                rel="noreferrer"
-                                                className="facts-org-item"
-                                                title={org.linkedin ? `${org.name} on LinkedIn` : org.name}
-                                            >
-                                                {org.image && <img src={org.image} alt={org.name} className="facts-org-pic" />}
-                                                <span className="facts-org-name">{org.name}</span>
-                                                {org.role && <small className="facts-org-role">({org.role})</small>}
-                                                <span className="facts-org-arr" aria-hidden="true">↗</span>
-                                            </a>
+                                            org.linkedin ? (
+                                                <a
+                                                    key={i}
+                                                    href={org.linkedin}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="facts-org-item"
+                                                    title={`${org.name} on LinkedIn`}
+                                                >
+                                                    <span className="facts-org-name">{org.name}</span>
+                                                    {org.role && <small className="facts-org-role">({org.role})</small>}
+                                                    <span className="facts-org-arr" aria-hidden="true">↗</span>
+                                                </a>
+                                            ) : (
+                                                <span key={i} className="facts-org-item">
+                                                    <span className="facts-org-name">{org.name}</span>
+                                                    {org.role && <small className="facts-org-role">({org.role})</small>}
+                                                </span>
+                                            )
                                         ))}
                                     </div>
                                 </div>
