@@ -238,6 +238,7 @@ export const EVENT_FIELDS = [
     { name: 'cta_label', label: 'Button label', type: 'text' },
     { name: 'featured', label: 'Feature on home page', type: 'toggle' },
     { name: 'show_in_timeline', label: 'Show in timeline', type: 'toggle' },
+    { name: 'extra.organizers', label: 'Organized by (team members)', type: 'organizers' },
     { name: 'extra.heading', label: 'Event page heading', type: 'text' },
     { name: 'extra.highlightsTitle', label: 'Highlights title', type: 'text' },
     { name: 'extra.highlights', label: 'Highlights (one per line, basic HTML allowed)', type: 'strings' },

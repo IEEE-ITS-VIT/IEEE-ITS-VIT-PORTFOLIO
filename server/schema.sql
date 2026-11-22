@@ -119,6 +119,17 @@ CREATE TABLE IF NOT EXISTS media (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- ───────────── Event Organizers / People Directory ─────────────
+CREATE TABLE IF NOT EXISTS event_organizers (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL,
+    role       TEXT DEFAULT '',
+    linkedin   TEXT DEFAULT '',
+    image      TEXT DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- ───────────── Submissions ─────────────
 CREATE TABLE IF NOT EXISTS orders (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,

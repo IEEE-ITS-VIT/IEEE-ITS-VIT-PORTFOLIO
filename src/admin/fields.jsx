@@ -360,6 +360,116 @@ function RowsInput({ field, value = [], onChange }) {
 }
 
 /* ---------- Per-page SEO ---------- */
+/* ---------- Organizers (Event team members with LinkedIn) ---------- */
+function OrganizersInput({ value = [], onChange }) {
+    const [directory, setDirectory] = useState([])
+    const [loadingDir, setLoadingDir] = useState(false)
+    const [addingNew, setAddingNew] = useState(false)
+    const [newMem, setNewMem] = useState({ name: '', role: '', linkedin: '', image: '' })
+    const [savingMem, setSavingMem] = useState(false)
+    const [selectedId, setSelectedId] = useState('')
+
+    const loadDirectory = () => {
+        setLoadingDir(true)
+        api.get('/admin/organizers')
+            .then(r => setDirectory(r.items || []))
+            .catch(() => {})
+            .finally(() => setLoadingDir(false))
+    }
+
+    useEffect(() => { loadDirectory() }, [])
+
+    const addFromDirectory = id => {
+        const found = directory.find(m => String(m.id) === String(id))
+        if (!found) return
+        if (value.some(o => o.name === found.name)) return
+        onChange([...value, { name: found.name, role: found.role || '', linkedin: found.linkedin || '', image: found.image || '' }])
+        setSelectedId('')
+    }
+
+    const saveAndAddNew = async e => {
+        e.preventDefault()
+        if (!newMem.name.trim()) return
+        setSavingMem(true)
+        try {
+            const { item } = await api.post('/admin/organizers', newMem)
+            setDirectory(list => [...list, item].sort((a, b) => a.name.localeCompare(b.name)))
+            onChange([...value, { name: item.name, role: item.role || '', linkedin: item.linkedin || '', image: item.image || '' }])
+            setNewMem({ name: '', role: '', linkedin: '', image: '' })
+            setAddingNew(false)
+        } catch (err) {
+            alert(err.message)
+        } finally {
+            setSavingMem(false)
+        }
+    }
+
+    const remove = i => {
+        onChange(value.filter((_, idx) => idx !== i))
+    }
+
+    return (
+        <div className="adm-organizers-field" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div className="adm-organizers-selected" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {value.length === 0 ? (
+                    <span className="adm-hint" style={{ margin: 0 }}>No organizers added yet. Select from the directory or add a new member below.</span>
+                ) : (
+                    value.map((org, i) => (
+                        <div key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 12px', background: 'var(--adm-surface-2, rgba(255,255,255,0.06))', borderRadius: 999, border: '1px solid var(--adm-line, rgba(255,255,255,0.12))', fontSize: '.82rem' }}>
+                            {org.image && <img src={thumb(org.image)} alt="" style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover' }} />}
+                            <strong>{org.name}</strong>
+                            {org.role && <small style={{ color: 'var(--adm-muted)' }}>· {org.role}</small>}
+                            {org.linkedin && (
+                                <a href={org.linkedin} target="_blank" rel="noreferrer" title="LinkedIn" style={{ color: '#0077b5', display: 'inline-flex', alignItems: 'center' }}>
+                                    <Icon name="external" size={13} />
+                                </a>
+                            )}
+                            <button type="button" onClick={() => remove(i)} style={{ background: 'none', border: 'none', color: 'var(--adm-muted)', cursor: 'pointer', padding: 0, marginLeft: 4 }} title="Remove">✕</button>
+                        </div>
+                    ))
+                )}
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 4 }}>
+                <select
+                    className="adm-input"
+                    value={selectedId}
+                    onChange={e => { setSelectedId(e.target.value); if (e.target.value) addFromDirectory(e.target.value); }}
+                    style={{ flex: 1 }}
+                >
+                    <option value="">{loadingDir ? 'Loading members…' : 'Select member with LinkedIn from directory…'}</option>
+                    {directory.map(m => (
+                        <option key={m.id} value={m.id}>
+                            {m.name} {m.role ? `(${m.role})` : ''} {m.linkedin ? '🔗 LinkedIn' : ''}
+                        </option>
+                    ))}
+                </select>
+                <button type="button" className="adm-btn small ghost" onClick={() => setAddingNew(a => !a)}>
+                    {addingNew ? 'Cancel' : '＋ Add new member'}
+                </button>
+            </div>
+
+            {addingNew && (
+                <div style={{ padding: 14, background: 'var(--adm-surface-2, rgba(255,255,255,0.04))', borderRadius: 8, border: '1px dashed var(--adm-line, rgba(255,255,255,0.15))', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ fontSize: '.8rem', fontWeight: 600 }}>Add new member with LinkedIn to directory</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                        <input className="adm-input" placeholder="Member Name *" value={newMem.name} onChange={e => setNewMem(m => ({ ...m, name: e.target.value }))} required />
+                        <input className="adm-input" placeholder="Role / Designation (e.g. Lead Organizer)" value={newMem.role} onChange={e => setNewMem(m => ({ ...m, role: e.target.value }))} />
+                    </div>
+                    <input className="adm-input" placeholder="LinkedIn Profile URL (https://linkedin.com/in/…)" value={newMem.linkedin} onChange={e => setNewMem(m => ({ ...m, linkedin: e.target.value }))} />
+                    <input className="adm-input" placeholder="Photo URL (optional)" value={newMem.image} onChange={e => setNewMem(m => ({ ...m, image: e.target.value }))} />
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                        <button type="button" className="adm-btn small ghost" onClick={() => setAddingNew(false)}>Cancel</button>
+                        <button type="button" className="adm-btn small primary" disabled={savingMem || !newMem.name.trim()} onClick={saveAndAddNew}>
+                            {savingMem ? 'Saving…' : 'Save to Directory & Add'}
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
 function SeoPagesInput({ value = {}, onChange }) {
     const [newPath, setNewPath] = useState('')
     const set = (path, k, v) => onChange({ ...value, [path]: { ...(value[path] || {}), [k]: v } })
@@ -419,6 +529,7 @@ export function Field({ field, value, onChange, ctx = {} }) {
             </div>
         )
         case 'rows': return <RowsInput field={field} value={value || []} onChange={onChange} />
+        case 'organizers': return <OrganizersInput value={value || []} onChange={onChange} />
         case 'event': return (
             <select {...common} onChange={e => onChange(e.target.value ? Number(e.target.value) : null)}>
                 <option value="">— Not linked —</option>

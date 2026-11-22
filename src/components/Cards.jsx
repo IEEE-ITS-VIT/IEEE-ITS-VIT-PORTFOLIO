@@ -101,6 +101,17 @@ export function EventCard({ event, delay = 0 }) {
                     <div className="card-meta"><span>{formatEventDate(event)}</span>{event.venue && <span>{event.venue}</span>}</div>
                     <h3 className="display h-sm">{event.title}</h3>
                     {event.summary && <p>{event.summary}</p>}
+                    {event.extra?.organizers?.length > 0 && (
+                        <div className="card-orgs" style={{ margin: '8px 0 0', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
+                            <small className="muted" style={{ fontSize: '.75rem' }}>Organized by:</small>
+                            {event.extra.organizers.map((o, idx) => (
+                                <a key={idx} href={o.linkedin || '#'} target={o.linkedin ? "_blank" : undefined} rel="noreferrer" className="card-org-pill" title={o.linkedin ? `${o.name} on LinkedIn` : o.name} onClick={e => e.stopPropagation()}>
+                                    <span>{o.name}</span>
+                                    <span className="card-org-arr">↗</span>
+                                </a>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </Link>
         </Reveal>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { api } from '../lib/api'
@@ -13,6 +13,20 @@ export default function JoinUs() {
     const [st, setSt] = useState({ busy: false, ok: '', err: '' })
     const [pw, setPw] = useState({ current: '', next: '' })
     const [pwMsg, setPwMsg] = useState(null)
+
+    const [prot, setProt] = useState({ enabled: true })
+    const [wtPw, setWtPw] = useState({ current: '', next: '' })
+    const [wtMsg, setWtMsg] = useState(null)
+    const [wtBusy, setWtBusy] = useState(false)
+    const [togglePw, setTogglePw] = useState('')
+    const [toggleBusy, setToggleBusy] = useState(false)
+    const [toggleMsg, setToggleMsg] = useState(null)
+
+    useEffect(() => {
+        if (user) {
+            api.get('/auth/webteam-protection').then(r => setProt(r)).catch(() => {})
+        }
+    }, [user])
 
     // Refill the form whenever the signed-in user (or their saved profile) changes.
     const [syncedUser, setSyncedUser] = useState(null)
@@ -47,6 +61,38 @@ export default function JoinUs() {
         catch (err) { setPwMsg({ ok: false, t: err.message }) }
     }
 
+    const changeWtPassword = async e => {
+        e.preventDefault()
+        setWtBusy(true)
+        setWtMsg(null)
+        try {
+            const r = await api.put('/auth/webteam-protection', { currentPassword: wtPw.current, newPassword: wtPw.next })
+            setWtMsg({ ok: true, t: r.message || 'Web team password updated.' })
+            setWtPw({ current: '', next: '' })
+        } catch (err) {
+            setWtMsg({ ok: false, t: err.message })
+        } finally {
+            setWtBusy(false)
+        }
+    }
+
+    const toggleProtection = async e => {
+        e.preventDefault()
+        setToggleBusy(true)
+        setToggleMsg(null)
+        try {
+            const nextEnabled = !prot.enabled
+            const r = await api.put('/auth/webteam-protection', { enabled: nextEnabled, currentPassword: togglePw })
+            setProt(prev => ({ ...prev, enabled: r.enabled }))
+            setToggleMsg({ ok: true, t: `Password protection ${r.enabled ? 'enabled' : 'disabled'}.` })
+            setTogglePw('')
+        } catch (err) {
+            setToggleMsg({ ok: false, t: err.message })
+        } finally {
+            setToggleBusy(false)
+        }
+    }
+
     return (
         <>
             <Seo title="Your Profile" noindex />
@@ -75,6 +121,59 @@ export default function JoinUs() {
                         <button className="btn" style={{ alignSelf: 'flex-start' }}>Update password</button>
                         {pwMsg && <p className={`notice ${pwMsg.ok ? 'ok' : 'err'}`}>{pwMsg.t}</p>}
                         <Link to="/merch?tab=orders" className="link-arrow" style={{ alignSelf: 'flex-start', marginTop: 8 }}>My bookings →</Link>
+                    </Reveal>
+                    <Reveal as="div" delay={0.2} className="form boxed" style={{ gridColumn: '1 / -1' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span className="label">Web Team Security</span>
+                            <span className={`chip ${prot.enabled ? 'live' : ''}`}>{prot.enabled ? 'Protected' : 'Disabled'}</span>
+                        </div>
+                        <p className="muted" style={{ fontSize: '.85rem', margin: '4px 0 16px' }}>
+                            Protects <strong>Likhith Medarametla</strong> in Web Team from unauthorized edits, changes, deletion, or disabling.
+                        </p>
+                        <div className="row-2" style={{ alignItems: 'flex-start', gap: 24 }}>
+                            <form onSubmit={toggleProtection} style={{ flex: 1 }}>
+                                <span className="label" style={{ fontSize: '.75rem' }}>Enable / Disable Protection</span>
+                                <label className="field">
+                                    <span>Current password</span>
+                                    <input
+                                        type="password"
+                                        placeholder="Enter current password"
+                                        value={togglePw}
+                                        onChange={e => setTogglePw(e.target.value)}
+                                        required
+                                    />
+                                </label>
+                                <button className="btn" type="submit" disabled={toggleBusy}>
+                                    {toggleBusy ? 'Updating…' : prot.enabled ? 'Disable password' : 'Enable password'}
+                                </button>
+                                {toggleMsg && <p className={`notice ${toggleMsg.ok ? 'ok' : 'err'}`} style={{ marginTop: 8 }}>{toggleMsg.t}</p>}
+                            </form>
+                            <form onSubmit={changeWtPassword} style={{ flex: 1 }}>
+                                <span className="label" style={{ fontSize: '.75rem' }}>Edit Web Team Password</span>
+                                <label className="field">
+                                    <span>Current password</span>
+                                    <input
+                                        type="password"
+                                        value={wtPw.current}
+                                        onChange={e => setWtPw(x => ({ ...x, current: e.target.value }))}
+                                        required
+                                        placeholder="Current password (default 2007)"
+                                    />
+                                </label>
+                                <label className="field">
+                                    <span>New password</span>
+                                    <input
+                                        type="password"
+                                        value={wtPw.next}
+                                        onChange={e => setWtPw(x => ({ ...x, next: e.target.value }))}
+                                        required
+                                        placeholder="New password"
+                                    />
+                                </label>
+                                <button className="btn solid" disabled={wtBusy}>{wtBusy ? 'Saving…' : 'Save new password'}</button>
+                                {wtMsg && <p className={`notice ${wtMsg.ok ? 'ok' : 'err'}`} style={{ marginTop: 8 }}>{wtMsg.t}</p>}
+                            </form>
+                        </div>
                     </Reveal>
                 </div>
             </Section>

@@ -84,6 +84,37 @@ export async function seedDefaults({ log = () => {} } = {}) {
         }
         log(`moments (${DEFAULT_MOMENTS.length})`)
     }
+
+    const existingProt = await db.first("SELECT value FROM settings WHERE key = 'webteam_protection'")
+    if (!existingProt) {
+        const hash = await hashPassword('2007')
+        await db.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('webteam_protection', ?)", [
+            JSON.stringify({ password_hash: hash, enabled: true, member_name: 'Likhith' })
+        ])
+        log('settings.webteam_protection (default password 2007 hashed)')
+    }
+
+    try {
+        const orgCount = await db.first('SELECT COUNT(*) AS n FROM event_organizers')
+        if (!orgCount || orgCount.n === 0) {
+            const people = [
+                ...(DEFAULT_CONTENT.board || []),
+                ...(DEFAULT_CONTENT.web_team || [])
+            ]
+            const seen = new Set()
+            for (const p of people) {
+                if (!p.name || seen.has(p.name)) continue
+                seen.add(p.name)
+                await db.run(
+                    'INSERT INTO event_organizers (name, role, linkedin, image) VALUES (?, ?, ?, ?)',
+                    [p.name, p.role || p.designation || '', p.linkedin || '', p.image || '']
+                )
+            }
+            log(`event_organizers (${seen.size})`)
+        }
+    } catch (err) {
+        console.error('Error seeding event_organizers:', err.message)
+    }
 }
 
 /**

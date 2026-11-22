@@ -428,6 +428,10 @@ export const DEFAULT_EVENTS = [
             ctaText: 'Officially register your interest to join IEEE ITS-VIT via VTOP!',
             closing: '"See you at the stall! Let\'s decode the future together. "',
             links: [],
+            organizers: [
+                { name: 'Likhith M', role: 'Full Stack Developer', linkedin: 'https://www.linkedin.com/in/likhith-medarametla-0039b6320?utm_source=share_via&utm_content=profile&utm_medium=member_android', image: '/team/likhith-m.jpg' },
+                { name: 'Jayanth M', role: 'Frontend & UI Specialist', linkedin: 'https://www.linkedin.com/in/mallidi-jaya-veera-maheswara-reddy-468426297?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=android_app', image: '/team/jayanth-m.jpg' },
+            ],
         },
     }),
     ev('ic-etite-28', "ic-ETITE'28", '2028-02-10', {

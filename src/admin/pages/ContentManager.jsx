@@ -5,7 +5,7 @@ import { api } from '../../lib/api'
 import { useSite } from '../../context/SiteContext'
 import { CONTENT_TYPES, slugify } from '../../../shared/cms.js'
 import { FieldForm, thumb } from '../fields'
-import { Drawer, PageTitle, Badge, Empty, Spinner, useToast, useConfirm, useLoader, Switch } from '../ui'
+import { Drawer, PageTitle, Badge, Empty, Spinner, useToast, useConfirm, useLoader, Switch, Modal } from '../ui'
 import { ANNOUNCE, AnnounceModal } from '../Announce'
 import { PreviewFrame, withItem } from '../Preview'
 import Icon from '../icons'
@@ -72,10 +72,37 @@ export default function ContentManager({ type }) {
     const confirm = useConfirm()
     const { data, loading, error, reload, setData } = useLoader(() => api.get(`/admin/content/${type}`).then(r => r.items), [type])
     const [items, setItems] = useState([])
-    const [editing, setEditing] = useState(null) // { id?, data, status, starts_at, ends_at }
+    const [editing, setEditing] = useState(null) // { id?, data, status, starts_at, ends_at, _password? }
     const [announcing, setAnnouncing] = useState(null)
     const [saving, setSaving] = useState(false)
     const [q, setQ] = useState('')
+
+    const isProtected = item => type === 'web_team' && /likhith/i.test(JSON.stringify(item || ''))
+    const [pwPrompt, setPwPrompt] = useState(null)
+    const [passwordInput, setPasswordInput] = useState('')
+    const [pwBusy, setPwBusy] = useState(false)
+    const [pwError, setPwError] = useState('')
+
+    const promptPassword = (message, onSubmit) => {
+        setPasswordInput('')
+        setPwError('')
+        setPwPrompt({ message, onSubmit })
+    }
+
+    const handlePwSubmit = async e => {
+        e.preventDefault()
+        if (!passwordInput) return setPwError('Password is required.')
+        setPwBusy(true)
+        setPwError('')
+        try {
+            await pwPrompt.onSubmit(passwordInput)
+            setPwPrompt(null)
+        } catch (err) {
+            setPwError(err.message || 'Incorrect password.')
+        } finally {
+            setPwBusy(false)
+        }
+    }
 
     useEffect(() => { setItems(data || []) }, [data])
 
@@ -84,8 +111,10 @@ export default function ContentManager({ type }) {
     const save = async () => {
         setSaving(true)
         try {
-            const body = { data: editing.data, status: editing.status, starts_at: editing.starts_at || null, ends_at: editing.ends_at || null }
-            const { item } = editing.id ? await api.put(`/admin/content/${type}/${editing.id}`, body) : await api.post(`/admin/content/${type}`, body)
+            const pw = editing._password
+            const headers = pw ? { 'x-admin-password': pw } : {}
+            const body = { data: editing.data, status: editing.status, starts_at: editing.starts_at || null, ends_at: editing.ends_at || null, admin_password: pw }
+            const { item } = editing.id ? await api.put(`/admin/content/${type}/${editing.id}`, body, { headers }) : await api.post(`/admin/content/${type}`, body)
             setData(list => (editing.id ? list.map(x => (x.id === item.id ? item : x)) : [...list, item]))
             toast(`${def.singular} ${editing.id ? 'updated' : 'created'}`)
             setEditing(null)
@@ -94,13 +123,15 @@ export default function ContentManager({ type }) {
         finally { setSaving(false) }
     }
 
-    const toggle = async (item, on) => {
+    const toggle = async (item, on, password) => {
         try {
-            const { item: updated } = await api.put(`/admin/content/${type}/${item.id}`, { data: strip(item), status: on ? 'published' : 'draft', starts_at: item._starts_at, ends_at: item._ends_at })
+            const pw = password || item._password
+            const headers = pw ? { 'x-admin-password': pw } : {}
+            const { item: updated } = await api.put(`/admin/content/${type}/${item.id}`, { data: strip(item), status: on ? 'published' : 'draft', starts_at: item._starts_at, ends_at: item._ends_at, admin_password: pw }, { headers })
             setData(list => list.map(x => (x.id === item.id ? updated : x)))
             toast(on ? 'Published' : 'Moved to drafts')
             afterChange()
-        } catch (e) { toast(e.message, 'error') }
+        } catch (e) { toast(e.message, 'error'); throw e }
     }
 
     const duplicate = async item => {
@@ -113,14 +144,46 @@ export default function ContentManager({ type }) {
         } catch (e) { toast(e.message, 'error') }
     }
 
-    const remove = async item => {
+    const remove = async (item, password) => {
         if (!await confirm(`Delete “${item[def.title] || def.singular}”? This cannot be undone. Its images are also deleted from ImageKit unless used elsewhere.`)) return
         try {
-            await api.del(`/admin/content/${type}/${item.id}`)
+            const pw = password || item._password
+            const headers = pw ? { 'x-admin-password': pw } : {}
+            await api.del(`/admin/content/${type}/${item.id}`, { admin_password: pw }, { headers })
             setData(list => list.filter(x => x.id !== item.id))
             toast('Deleted')
             afterChange()
-        } catch (e) { toast(e.message, 'error') }
+        } catch (e) { toast(e.message, 'error'); throw e }
+    }
+
+    const handleEdit = item => {
+        if (isProtected(item)) {
+            promptPassword('Enter password to edit Likhith Medarametla in Web Team.', async pw => {
+                setEditing({ id: item.id, data: strip(item), status: item._status, starts_at: toLocalInput(item._starts_at), ends_at: toLocalInput(item._ends_at), _password: pw })
+            })
+        } else {
+            setEditing({ id: item.id, data: strip(item), status: item._status, starts_at: toLocalInput(item._starts_at), ends_at: toLocalInput(item._ends_at) })
+        }
+    }
+
+    const handleToggle = (item, on) => {
+        if (isProtected(item)) {
+            promptPassword(`Enter password to ${on ? 'publish' : 'disable (move to draft)'} Likhith Medarametla in Web Team.`, async pw => {
+                await toggle(item, on, pw)
+            })
+        } else {
+            toggle(item, on)
+        }
+    }
+
+    const handleRemove = item => {
+        if (isProtected(item)) {
+            promptPassword('Enter password to delete Likhith Medarametla from Web Team.', async pw => {
+                await remove(item, pw)
+            })
+        } else {
+            remove(item)
+        }
     }
 
     const persistOrder = async () => {
@@ -152,14 +215,19 @@ export default function ContentManager({ type }) {
             {type === 'magazines' && liveSettings?.blogs?.magazineEnabled === false && (
                 <p className="adm-hint warn">The Magazines section is switched off, so these magazines are not shown on the website. <Link to="/admin/s/blogs">Turn it on in Blogs Page settings</Link>.</p>
             )}
+            {type === 'web_team' && (
+                <p className="adm-hint" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                    <Icon name="lock" size={14} /> <span><strong>Note:</strong> Likhith Medarametla is password-protected. Password can be edited or disabled in <Link to="/join" style={{ textDecoration: 'underline' }}>My Profile</Link>.</span>
+                </p>
+            )}
             {loading ? <Spinner /> : error ? <p className="adm-hint warn">{error}</p> : filtered.length === 0 ? (
                 <Empty>No {def.label.toLowerCase()} yet.</Empty>
             ) : (
                 <Reorder.Group axis="y" values={items} onReorder={q ? () => {} : setItems} className="adm-list" onPointerUp={() => !q && JSON.stringify(items.map(i => i.id)) !== JSON.stringify((data || []).map(i => i.id)) && persistOrder()}>
                     {filtered.map(item => (
                         <Row key={item.id} item={item} def={def}
-                            onEdit={() => setEditing({ id: item.id, data: strip(item), status: item._status, starts_at: toLocalInput(item._starts_at), ends_at: toLocalInput(item._ends_at) })}
-                            onToggle={on => toggle(item, on)} onDuplicate={() => duplicate(item)} onDelete={() => remove(item)}
+                            onEdit={() => handleEdit(item)}
+                            onToggle={on => handleToggle(item, on)} onDuplicate={() => duplicate(item)} onDelete={() => handleRemove(item)}
                             onEmail={ANNOUNCE[type] ? () => setAnnouncing(item) : undefined} />
                     ))}
                 </Reorder.Group>
@@ -189,6 +257,31 @@ export default function ContentManager({ type }) {
                     </fieldset>
                 </>}
             </Drawer>
+
+            <Modal open={!!pwPrompt} onClose={() => setPwPrompt(null)} title="Password Required">
+                {pwPrompt && (
+                    <form className="adm-form" onSubmit={handlePwSubmit}>
+                        <p style={{ margin: '0 0 16px', color: 'var(--adm-muted)' }}>{pwPrompt.message}</p>
+                        <label className="adm-field">
+                            <span>Password</span>
+                            <input
+                                className="adm-input"
+                                type="password"
+                                placeholder="Enter password"
+                                value={passwordInput}
+                                onChange={e => setPasswordInput(e.target.value)}
+                                autoFocus
+                                required
+                            />
+                        </label>
+                        {pwError && <p className="adm-err" role="alert">{pwError}</p>}
+                        <div className="adm-row end" style={{ marginTop: 20 }}>
+                            <button type="button" className="adm-btn ghost" onClick={() => setPwPrompt(null)}>Cancel</button>
+                            <button type="submit" className="adm-btn primary" disabled={pwBusy}>{pwBusy ? 'Verifying…' : 'Confirm'}</button>
+                        </div>
+                    </form>
+                )}
+            </Modal>
         </>
     )
 }

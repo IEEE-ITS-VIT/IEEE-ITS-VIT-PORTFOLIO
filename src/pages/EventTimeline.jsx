@@ -45,6 +45,17 @@ export default function EventTimeline() {
                                                 </div>
                                                 <h3 className="display h-sm"><Link to={`/events/${e.slug}`}>{e.title}</Link></h3>
                                                 {e.summary && <p>{e.summary}</p>}
+                                                {e.extra?.organizers?.length > 0 && (
+                                                    <div className="tl-organizers" style={{ margin: '8px 0 4px', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                                                        <small className="muted" style={{ fontSize: '.75rem' }}>Organized by:</small>
+                                                        {e.extra.organizers.map((o, idx) => (
+                                                            <a key={idx} href={o.linkedin || '#'} target={o.linkedin ? "_blank" : undefined} rel="noreferrer" className="tl-org-pill" title={o.linkedin ? `${o.name} on LinkedIn` : o.name}>
+                                                                <span>{o.name}</span>
+                                                                <span className="tl-org-arr">↗</span>
+                                                            </a>
+                                                        ))}
+                                                    </div>
+                                                )}
                                                 <div className="hero-cta" style={{ marginTop: 6 }}>
                                                     <Link to={`/events/${e.slug}`} className="link-arrow">Details →</Link>
                                                     {e.state !== 'past' && e.registration_url && <SmartLink to={e.registration_url} className="link-arrow">{label(e.cta_label)} →</SmartLink>}

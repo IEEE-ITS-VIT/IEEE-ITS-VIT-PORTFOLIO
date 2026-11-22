@@ -7,7 +7,7 @@ export class ApiError extends Error {
     }
 }
 
-export async function api(path, { method = 'GET', body, signal } = {}) {
+export async function api(path, { method = 'GET', body, signal, headers = {} } = {}) {
     const res = await fetch(`/api${path}`, {
         method,
         signal,
@@ -15,6 +15,7 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
         headers: {
             ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
             ...(method !== 'GET' ? { 'X-Requested-With': 'its-web' } : {}),
+            ...headers,
         },
         body: body !== undefined ? JSON.stringify(body) : undefined,
     })
@@ -24,7 +25,7 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
 }
 
 api.get = (p, o) => api(p, { ...o, method: 'GET' })
-api.post = (p, body) => api(p, { method: 'POST', body: body ?? {} })
-api.put = (p, body) => api(p, { method: 'PUT', body: body ?? {} })
-api.patch = (p, body) => api(p, { method: 'PATCH', body: body ?? {} })
-api.del = p => api(p, { method: 'DELETE', body: {} })
+api.post = (p, body, o) => api(p, { ...o, method: 'POST', body: body ?? {} })
+api.put = (p, body, o) => api(p, { ...o, method: 'PUT', body: body ?? {} })
+api.patch = (p, body, o) => api(p, { ...o, method: 'PATCH', body: body ?? {} })
+api.del = (p, body, o) => api(p, { ...o, method: 'DELETE', body: body ?? {} })

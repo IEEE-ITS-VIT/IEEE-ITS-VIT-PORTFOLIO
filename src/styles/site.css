@@ -819,3 +819,167 @@ img, video { max-width: 100%; }
 .cx-status.pending { color: #ffb547; border-color: #ffb547; } .cx-status.approved { color: #3ddc97; border-color: #3ddc97; } .cx-status.rejected { color: var(--muted); }
 @media (max-width: 900px) { .cx-list { grid-template-columns: 1fr; } .cx-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cx-filters { grid-template-columns: 1fr 1fr; } .cx-filters input { grid-column: 1 / -1; } }
 @media (max-width: 520px) { .cx-grid { grid-template-columns: 1fr; } }
+
+/* ───────────── Event Organizers with LinkedIn ───────────── */
+.facts > div.facts-organizers-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+.facts-orgs-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.facts-org-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: .88rem;
+  transition: color .2s var(--ease);
+}
+.facts-org-item:hover {
+  color: #0077b5;
+}
+.facts-org-pic {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.facts-org-name {
+  white-space: nowrap;
+}
+.facts-org-role {
+  font-weight: 400;
+  font-size: .75rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.facts-org-arr {
+  color: #0077b5;
+  font-size: .95rem;
+  opacity: .5;
+  transition: transform .2s var(--ease), opacity .2s var(--ease);
+  display: inline-block;
+  line-height: 1;
+}
+.facts-org-item:hover .facts-org-arr {
+  opacity: 1;
+  transform: translate(2px, -2px);
+}
+
+.ev-organizers-wrap {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.ev-organizers-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.ev-organizer-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm, 8px);
+  background: var(--surface-2, rgba(255,255,255,0.04));
+  border: 1px solid var(--line, rgba(255,255,255,0.08));
+  color: var(--text);
+  text-decoration: none;
+  transition: all .25s var(--ease);
+}
+.ev-organizer-item:hover {
+  background: rgba(0, 119, 181, 0.08);
+  border-color: #0077b5;
+  color: var(--text);
+  transform: translateY(-1px);
+}
+.ev-org-pic {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.ev-org-initial {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--surface, #1e293b);
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: .8rem;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.ev-org-text {
+  flex: 1;
+  min-width: 0;
+}
+.ev-org-name {
+  font-weight: 600;
+  font-size: .88rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ev-org-role {
+  font-size: .75rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ev-org-arrow {
+  font-size: 1rem;
+  color: #0077b5;
+  opacity: .5;
+  transition: transform .25s var(--ease), opacity .25s var(--ease);
+  display: inline-block;
+  line-height: 1;
+}
+.ev-organizer-item:hover .ev-org-arrow {
+  opacity: 1;
+  transform: translate(3px, -3px);
+}
+
+.tl-org-pill, .card-org-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2, rgba(255,255,255,0.05));
+  border: 1px solid var(--line, rgba(255,255,255,0.1));
+  font-size: .75rem;
+  color: var(--text);
+  text-decoration: none;
+  transition: all .2s var(--ease);
+}
+.tl-org-pill:hover, .card-org-pill:hover {
+  border-color: #0077b5;
+  background: rgba(0, 119, 181, 0.1);
+  color: var(--accent);
+}
+.tl-org-arr, .card-org-arr {
+  color: #0077b5;
+  font-size: .8rem;
+  opacity: .5;
+  transition: transform .2s var(--ease), opacity .2s var(--ease);
+}
+.tl-org-pill:hover .tl-org-arr, .card-org-pill:hover .card-org-arr {
+  opacity: 1;
+  transform: translate(2px, -2px);
+}

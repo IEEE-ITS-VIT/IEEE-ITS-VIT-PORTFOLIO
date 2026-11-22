@@ -52,7 +52,31 @@ export default function EventDetail({ slug: fixedSlug }) {
                         <Img src={pic.src(e)} alt={`${e.title} poster`} ratio="16x9" width={1400} contain={!!e.poster_url} eager fallback={pic.fallback} />
                     </Reveal>
                     <Reveal delay={0.1} className="form">
-                        <div className="facts">{facts.map(([k, v]) => <div key={k}><span>{k}</span><b>{v}</b></div>)}</div>
+                        <div className="facts">
+                            {facts.map(([k, v]) => <div key={k}><span>{k}</span><b>{v}</b></div>)}
+                            {x.organizers?.length > 0 && (
+                                <div className="facts-organizers-row">
+                                    <span>Organized by</span>
+                                    <div className="facts-orgs-list">
+                                        {x.organizers.map((org, i) => (
+                                            <a
+                                                key={i}
+                                                href={org.linkedin || '#'}
+                                                target={org.linkedin ? '_blank' : undefined}
+                                                rel="noreferrer"
+                                                className="facts-org-item"
+                                                title={org.linkedin ? `${org.name} on LinkedIn` : org.name}
+                                            >
+                                                {org.image && <img src={org.image} alt={org.name} className="facts-org-pic" />}
+                                                <span className="facts-org-name">{org.name}</span>
+                                                {org.role && <small className="facts-org-role">({org.role})</small>}
+                                                <span className="facts-org-arr" aria-hidden="true">↗</span>
+                                            </a>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                         {e.state === 'upcoming' && <Countdown date={e.start_date} />}
                         {e.state !== 'past' && e.registration_url && <SmartLink to={e.registration_url} className="btn solid">{label(e.cta_label) || 'Register'} <span className="arr">→</span></SmartLink>}
                         {x.links?.map((l, i) => <SmartLink key={i} to={l.url} className="btn">{l.label}</SmartLink>)}

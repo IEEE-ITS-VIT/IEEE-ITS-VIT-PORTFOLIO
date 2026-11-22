@@ -70,6 +70,12 @@ function cleanField(field, value) {
         case 'select': return field.options?.includes(value) ? value : field.options?.[0] || ''
         case 'rows': return (Array.isArray(value) ? value : []).slice(0, 100).map(row => Object.fromEntries(
             (field.fields || []).map(sf => [sf.name, sf.type === 'url' ? safeUrl(row?.[sf.name]) : str(row?.[sf.name], 1000)])))
+        case 'organizers': return (Array.isArray(value) ? value : []).slice(0, 50).map(o => ({
+            name: str(o.name, 120),
+            role: str(o.role, 120),
+            linkedin: safeUrl(o.linkedin),
+            image: safeUrl(o.image)
+        })).filter(o => o.name)
         case 'date': return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) ? value : null
         case 'event': return value ? Number(value) || null : null
         case 'color': return /^#[0-9a-f]{6}$/i.test(String(value || '')) ? String(value).toLowerCase() : null
@@ -394,6 +400,59 @@ route('PUT', '/api/auth/profile', async ({ user, body }) => {
     return { user: publicUser(await getDb().first('SELECT * FROM users WHERE id = ?', [user.id])) }
 })
 
+/* ───────────── Web Team Likhith Protection ───────────── */
+async function getWebteamProtection() {
+    const db = getDb()
+    let row = await db.first("SELECT value FROM settings WHERE key = 'webteam_protection'")
+    if (!row) {
+        const hash = await hashPassword('2007')
+        const initial = { password_hash: hash, enabled: true, member_name: 'Likhith' }
+        await db.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('webteam_protection', ?)", [JSON.stringify(initial)])
+        return initial
+    }
+    return parseJson(row.value, { password_hash: '', enabled: true })
+}
+
+function isLikhith(rowOrData) {
+    if (!rowOrData) return false
+    const strVal = typeof rowOrData === 'string' ? rowOrData : JSON.stringify(rowOrData)
+    return /likhith/i.test(strVal)
+}
+
+route('GET', '/api/auth/webteam-protection', async ({ user }) => {
+    requireRole(user, 'member')
+    const prot = await getWebteamProtection()
+    return { ok: true, enabled: !!prot.enabled }
+})
+
+route('PUT', '/api/auth/webteam-protection', async ({ user, body }) => {
+    requireRole(user, 'member')
+    const prot = await getWebteamProtection()
+    const db = getDb()
+
+    if (body.enabled !== undefined && body.enabled !== prot.enabled) {
+        if (!body.currentPassword || !(await verifyPassword(body.currentPassword, prot.password_hash))) {
+            fail(400, 'Current password is required to change protection status.')
+        }
+        prot.enabled = !!body.enabled
+    }
+
+    if (body.newPassword) {
+        if (!body.currentPassword || !(await verifyPassword(body.currentPassword, prot.password_hash))) {
+            fail(400, 'Current password is incorrect.')
+        }
+        if (typeof body.newPassword !== 'string' || body.newPassword.length < 3) {
+            fail(400, 'New password must be at least 3 characters.')
+        }
+        prot.password_hash = await hashPassword(body.newPassword)
+    }
+
+    await db.run("UPDATE settings SET value = ?, updated_at = datetime('now') WHERE key = 'webteam_protection'",
+        [JSON.stringify(prot)])
+    await audit(user, 'update', 'webteam_protection', '', `Web team protection enabled: ${prot.enabled}`)
+    return { ok: true, enabled: !!prot.enabled, message: 'Web team protection updated successfully.' }
+})
+
 /* Forgot password: email a 6-digit code. The response never reveals whether the account exists. */
 route('POST', '/api/auth/forgot', async ({ req, body }) => {
     const email = str(body.email, 200).toLowerCase()
@@ -550,13 +609,23 @@ route('POST', '/api/admin/content/:type', async ({ user, params, body }) => {
     return { item: contentRow(await db.first('SELECT * FROM content WHERE id = ?', [r.lastId])) }
 })
 
-route('PUT', '/api/admin/content/:type/:id', async ({ user, params, body }) => {
+route('PUT', '/api/admin/content/:type/:id', async ({ req, user, params, body }) => {
     requireRole(user, 'editor')
     const data = prepareContent(params.type, body.data)
     const meta = contentMeta(body)
     const db = getDb()
     const before = await db.first('SELECT data FROM content WHERE id = ? AND type = ?', [Number(params.id), params.type])
     if (!before) fail(404, 'Item not found')
+
+    if (params.type === 'web_team' && (isLikhith(before.data) || isLikhith(body?.data))) {
+        const prot = await getWebteamProtection()
+        if (prot.enabled) {
+            const pw = req.headers['x-admin-password'] || body?.admin_password || body?.password
+            if (!pw || !(await verifyPassword(pw, prot.password_hash))) {
+                fail(403, 'Password required to edit, change, or disable Likhith Medarametla in Web Team.')
+            }
+        }
+    }
     await db.run("UPDATE content SET data = ?, status = ?, starts_at = ?, ends_at = ?, updated_at = datetime('now') WHERE id = ? AND type = ?",
         [JSON.stringify(data), meta.status, meta.starts_at, meta.ends_at, Number(params.id), params.type])
     await audit(user, 'update', params.type, params.id, data[CONTENT_TYPES[params.type].title] || '')
@@ -564,10 +633,20 @@ route('PUT', '/api/admin/content/:type/:id', async ({ user, params, body }) => {
     return { item: contentRow(await db.first('SELECT * FROM content WHERE id = ?', [Number(params.id)])) }
 })
 
-route('DELETE', '/api/admin/content/:type/:id', async ({ user, params }) => {
+route('DELETE', '/api/admin/content/:type/:id', async ({ req, user, params, body }) => {
     requireRole(user, 'editor'); typeDef(params.type)
     const before = await getDb().first('SELECT data FROM content WHERE id = ? AND type = ?', [Number(params.id), params.type])
     if (!before) fail(404, 'Item not found')
+
+    if (params.type === 'web_team' && isLikhith(before.data)) {
+        const prot = await getWebteamProtection()
+        if (prot.enabled) {
+            const pw = req.headers['x-admin-password'] || body?.admin_password || body?.password || (req.url && req.url.includes('password=') ? new URL(req.url, 'http://l').searchParams.get('password') : null)
+            if (!pw || !(await verifyPassword(pw, prot.password_hash))) {
+                fail(403, 'Password required to delete Likhith Medarametla in Web Team.')
+            }
+        }
+    }
     await getDb().run('DELETE FROM content WHERE id = ? AND type = ?', [Number(params.id), params.type])
     await audit(user, 'delete', params.type, params.id)
     await releaseImages(user, imageUrls(before.data))
@@ -662,6 +741,16 @@ async function uniqueSlug(table, base, id) {
 function prepareEvent(body) {
     const e = cleanByFields(EVENT_FIELDS, body)
     if (e.end_date && e.end_date < e.start_date) fail(400, 'End date cannot be before the start date.')
+    const rawOrg = body?.extra?.organizers || body?.organizers
+    if (Array.isArray(rawOrg)) {
+        e.extra = e.extra || {}
+        e.extra.organizers = rawOrg.map(o => ({
+            name: str(o.name, 120),
+            role: str(o.role, 120),
+            linkedin: safeUrl(o.linkedin),
+            image: safeUrl(o.image)
+        })).filter(o => o.name)
+    }
     return { ...e, status: body.status === 'draft' ? 'draft' : 'published' }
 }
 
@@ -703,6 +792,43 @@ route('DELETE', '/api/admin/events/:id', async ({ user, params }) => {
     await getDb().run('DELETE FROM events WHERE id = ?', [id])
     await audit(user, 'delete', 'event', id)
     await releaseImages(user, imageUrls(before.poster_url, before.extra, before.body_html))
+    return { ok: true }
+})
+
+/* ── admin: event organizers / directory ── */
+route('GET', '/api/admin/organizers', async ({ user }) => {
+    requireRole(user, 'editor')
+    const db = getDb()
+    try {
+        const items = await db.all('SELECT * FROM event_organizers ORDER BY name ASC')
+        return { items }
+    } catch {
+        return { items: [] }
+    }
+})
+
+route('POST', '/api/admin/organizers', async ({ user, body }) => {
+    requireRole(user, 'editor')
+    const name = str(body.name, 120)
+    if (!name) fail(400, 'Organizer name is required.')
+    const role = str(body.role, 120)
+    const linkedin = safeUrl(body.linkedin)
+    const image = safeUrl(body.image)
+    const db = getDb()
+    const r = await db.run(
+        'INSERT INTO event_organizers (name, role, linkedin, image) VALUES (?, ?, ?, ?)',
+        [name, role, linkedin, image]
+    )
+    const item = await db.first('SELECT * FROM event_organizers WHERE id = ?', [r.lastId])
+    await audit(user, 'create', 'event_organizer', r.lastId, name)
+    return { item }
+})
+
+route('DELETE', '/api/admin/organizers/:id', async ({ user, params }) => {
+    requireRole(user, 'editor')
+    const db = getDb()
+    await db.run('DELETE FROM event_organizers WHERE id = ?', [Number(params.id)])
+    await audit(user, 'delete', 'event_organizer', params.id)
     return { ok: true }
 })
 
