@@ -1129,6 +1129,192 @@ route('DELETE', '/api/admin/subscribers/:id', async ({ user, params }) => {
     return { ok: true }
 })
 
+/* ── admin: members master ── */
+route('GET', '/api/admin/members-master', async ({ user }) => {
+    requireRole(user, 'editor')
+    const db = getDb()
+
+    // 1. All users
+    const userRows = await db.all('SELECT * FROM users ORDER BY id DESC').catch(() => [])
+
+    // 2. All recruitment applications with domain titles
+    const recApps = await db.all(`
+        SELECT a.id, a.user_id, a.domain_id, a.status, a.source, a.auto_score, a.manual_score, a.max_score,
+               d.title AS domain_title, a.created_at
+        FROM rec_applications a
+        JOIN rec_domains d ON d.id = a.domain_id
+        ORDER BY a.id DESC
+    `).catch(() => [])
+
+    // 3. Content items: board, advisory, web_team, faculty
+    const contentItems = await db.all(`
+        SELECT id, type, data, sort_order, status, created_at
+        FROM content
+        WHERE type IN ('board', 'advisory', 'web_team', 'faculty')
+        ORDER BY sort_order, id
+    `).catch(() => [])
+
+    // Build user applications lookup
+    const userApps = {}
+    for (const app of recApps) {
+        if (!userApps[app.user_id]) userApps[app.user_id] = []
+        userApps[app.user_id].push({
+            id: app.id,
+            domainId: app.domain_id,
+            domain: app.domain_title,
+            status: app.status,
+            source: app.source,
+            score: (app.auto_score ?? 0) + (app.manual_score ?? 0),
+            maxScore: app.max_score,
+            createdAt: app.created_at,
+        })
+    }
+
+    // Process CMS items
+    const parsedCms = contentItems.map(c => {
+        const d = parseJson(c.data, {})
+        return {
+            id: c.id,
+            type: c.type,
+            name: (d.name || '').trim(),
+            role: d.role || d.designation || '',
+            department: d.department || '',
+            year: d.year || '',
+            group: d.group || '',
+            image: d.image || '',
+            initials: d.initials || '',
+            linkedin: d.linkedin || '',
+            instagram: d.instagram || '',
+            status: c.status,
+            createdAt: c.created_at,
+        }
+    })
+
+    const matchedCmsIds = new Set()
+    const members = []
+
+    // 1. Process all registered users
+    for (const u of userRows) {
+        const uNameKey = (u.name || '').trim().toLowerCase()
+        const apps = userApps[u.id] || []
+
+        // Find matching CMS entries for this user by name
+        const matchedCms = parsedCms.filter(c => {
+            if (c.name && c.name.toLowerCase() === uNameKey) {
+                matchedCmsIds.add(c.id)
+                return true
+            }
+            return false
+        })
+
+        const affiliations = ['user']
+        let primaryPosition = ''
+        let primaryCategory = 'Registered User'
+
+        // Check if recruited or applicant
+        const selectedApps = apps.filter(a => a.status === 'selected')
+        if (selectedApps.length > 0) {
+            affiliations.push('recruited')
+            primaryPosition = `Core Member (${selectedApps.map(a => a.domain).join(', ')})`
+            primaryCategory = 'Recruited Member'
+        } else if (apps.length > 0) {
+            affiliations.push('applicant')
+            primaryPosition = `Applicant (${apps.map(a => `${a.domain}: ${a.status}`).join(', ')})`
+            primaryCategory = 'Applicant'
+        }
+
+        // CMS affiliations
+        for (const c of matchedCms) {
+            affiliations.push(c.type)
+            if (c.type === 'board') {
+                primaryPosition = c.role || 'Board Member'
+                primaryCategory = 'Board Member'
+            } else if (c.type === 'web_team') {
+                primaryPosition = c.role || 'Web Team'
+                primaryCategory = 'Web Team'
+            } else if (c.type === 'advisory') {
+                primaryPosition = c.role || `Advisory Board (${c.year || 'Past'})`
+                primaryCategory = `Advisory Board ${c.year ? `(${c.year})` : ''}`
+            } else if (c.type === 'faculty') {
+                primaryPosition = c.role || 'Faculty Coordinator'
+                primaryCategory = 'Faculty'
+            }
+        }
+
+        if (!primaryPosition) {
+            primaryPosition = u.role === 'admin' ? 'Administrator' : u.role === 'editor' ? 'Editor' : 'User'
+        }
+
+        const domainList = apps.map(a => ({
+            name: a.domain,
+            status: a.status,
+            score: a.score,
+        }))
+
+        members.push({
+            id: `user-${u.id}`,
+            userId: u.id,
+            name: u.name,
+            email: u.email,
+            mobile: u.mobile || '',
+            regNo: u.reg_no || '',
+            memberType: u.member_type || 'External Member',
+            systemRole: u.role,
+            isRegistered: true,
+            active: !!u.active,
+            lastLoginAt: u.last_login_at,
+            createdAt: u.created_at,
+            affiliations: [...new Set(affiliations)],
+            primaryPosition,
+            primaryCategory,
+            domains: domainList,
+            applications: apps,
+            cmsLinks: matchedCms.map(c => ({ id: c.id, type: c.type, role: c.role, year: c.year, group: c.group })),
+            avatarUrl: u.avatar_url || matchedCms.find(c => c.image)?.image || '',
+            linkedin: matchedCms.find(c => c.linkedin)?.linkedin || '',
+            instagram: matchedCms.find(c => c.instagram)?.instagram || '',
+        })
+    }
+
+    // 2. Add CMS entries that did not match an existing user
+    for (const c of parsedCms) {
+        if (matchedCmsIds.has(c.id)) continue
+
+        let cat = 'Other'
+        let pos = c.role
+        if (c.type === 'board') { cat = 'Board Member'; pos = pos || 'Board Member' }
+        else if (c.type === 'web_team') { cat = 'Web Team'; pos = pos || 'Web Team Member' }
+        else if (c.type === 'advisory') { cat = `Advisory Board ${c.year ? `(${c.year})` : ''}`; pos = pos || 'Past Member' }
+        else if (c.type === 'faculty') { cat = 'Faculty'; pos = pos || 'Faculty Coordinator' }
+
+        members.push({
+            id: `cms-${c.type}-${c.id}`,
+            contentId: c.id,
+            name: c.name || 'Unnamed',
+            email: '',
+            mobile: '',
+            regNo: '',
+            memberType: c.type === 'faculty' ? 'Faculty' : 'Member',
+            systemRole: '—',
+            isRegistered: false,
+            active: c.status === 'published',
+            lastLoginAt: null,
+            createdAt: c.createdAt,
+            affiliations: [c.type],
+            primaryPosition: pos || '—',
+            primaryCategory: cat,
+            domains: [],
+            applications: [],
+            cmsLinks: [{ id: c.id, type: c.type, role: c.role, year: c.year, group: c.group }],
+            avatarUrl: c.image || '',
+            linkedin: c.linkedin || '',
+            instagram: c.instagram || '',
+        })
+    }
+
+    return { items: members }
+})
+
 /* ── admin: users ── */
 const adminUser = u => ({ ...publicUser(u), active: !!u.active, lastLoginAt: u.last_login_at })
 

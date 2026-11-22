@@ -305,7 +305,7 @@ export default function ContentManager({ type }) {
             {loading ? <Spinner /> : error ? <p className="adm-hint warn">{error}</p> : filtered.length === 0 ? (
                 <Empty>No {def.label.toLowerCase()} yet.</Empty>
             ) : (
-                <Reorder.Group axis="y" values={items} onReorder={q ? () => {} : setItems} className="adm-list" onPointerUp={() => !q && JSON.stringify(items.map(i => i.id)) !== JSON.stringify((data || []).map(i => i.id)) && persistOrder()}>
+                <Reorder.Group axis="y" values={items} onReorder={q ? () => { } : setItems} className="adm-list" onPointerUp={() => !q && JSON.stringify(items.map(i => i.id)) !== JSON.stringify((data || []).map(i => i.id)) && persistOrder()}>
                     {filtered.map(item => (
                         <Row key={item.id} item={item} def={def}
                             onEdit={() => handleEdit(item)}

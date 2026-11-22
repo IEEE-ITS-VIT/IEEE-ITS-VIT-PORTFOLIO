@@ -22,6 +22,7 @@ import ConnectAdmin from './pages/ConnectAdmin'
 import PortalEditor from './pages/PortalEditor'
 import Outbox from './pages/Outbox'
 import CertificatesTool from './pages/CertificatesTool'
+import MembersMaster from './pages/MembersMaster'
 import Icon from './icons'
 import './admin.css'
 
@@ -49,7 +50,16 @@ const NAV = [
         ],
     },
     { group: 'Events', items: [{ to: '/admin/events', label: 'Events & Timeline', icon: 'calendar' }, { to: '/admin/moments', label: 'Moments (Albums)', icon: 'camera' }] },
-    { group: 'People', items: [{ to: '/admin/c/board', label: 'Board Members', icon: 'users' }, { to: '/admin/c/faculty', label: 'Faculty', icon: 'school' }, { to: '/admin/c/advisory', label: 'Advisory Board', icon: 'award' }, { to: '/admin/c/web_team', label: 'Web Team', icon: 'code' }] },
+    {
+        group: 'People', items: [
+            { to: '/admin/members-master', label: 'Members Master', icon: 'users' },
+            { to: '/admin/users', label: 'Users with Roles', icon: 'lock', admin: true },
+            { to: '/admin/c/board', label: 'Board Members', icon: 'users' },
+            { to: '/admin/c/faculty', label: 'Faculty', icon: 'school' },
+            { to: '/admin/c/advisory', label: 'Advisory Board', icon: 'award' },
+            { to: '/admin/c/web_team', label: 'Web Team', icon: 'code' },
+        ],
+    },
     { group: 'Publications', items: [{ to: '/admin/c/projects', label: 'Projects', icon: 'code' }, { to: '/admin/c/resources', label: 'Resources', icon: 'book' }, { to: '/admin/c/blogs', label: 'Blogs', icon: 'pen' }, { to: '/admin/c/magazines', label: 'Magazines', icon: 'book' }, { to: '/admin/connect', label: 'Connect (shared Q&A)', icon: 'users' }, { to: '/admin/c/vlogs', label: 'Vlogs', icon: 'video' }, { to: '/admin/c/faqs', label: 'FAQs', icon: 'help' }] },
     {
         group: 'Store & Inbox', items: [
@@ -65,7 +75,7 @@ const NAV = [
             { to: '/admin/s/appearance', label: 'Animations', icon: 'sparkles' }, { to: '/admin/s/blogs', label: 'Blogs Page', icon: 'news' },
             { to: '/admin/s/vlogs', label: 'Vlogs Page', icon: 'tv' }, { to: '/admin/s/webteam', label: 'Web Team Page', icon: 'code' },
             { to: '/admin/s/games', label: 'Games Page', icon: 'gamepad' },
-            { to: '/admin/email', label: 'Email & SMTP', icon: 'send', admin: true }, { to: '/admin/users', label: 'Users & Roles', icon: 'lock', admin: true },
+            { to: '/admin/email', label: 'Email & SMTP', icon: 'send', admin: true }, { to: '/admin/users', label: 'Users with Roles', icon: 'lock', admin: true },
             { to: '/admin/audit', label: 'Audit Log', icon: 'scroll', admin: true },
         ],
     },
@@ -188,6 +198,7 @@ export default function AdminApp() {
                                     <Route path="/admin/orders" element={<Orders />} />
                                     <Route path="/admin/queries" element={<Queries />} />
                                     <Route path="/admin/subscribers" element={<Subscribers />} />
+                                    <Route path="/admin/members-master" element={<MembersMaster />} />
                                     {isAdmin && <Route path="/admin/users" element={<Users />} />}
                                     {isAdmin && <Route path="/admin/email" element={<EmailSettings />} />}
                                     {isAdmin && <Route path="/admin/audit" element={<AuditLog />} />}

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { useAuth } from '../../hooks/useAuth'
 import { PageTitle, Badge, Spinner, useToast, useConfirm, useLoader, fmtDate, Modal, Switch, downloadCsv } from '../ui'
@@ -46,11 +47,12 @@ export default function Users() {
 
     return (
         <>
-            <PageTitle title="Users & Roles" subtitle="Members sign up on the website. Promote trusted members to Editor or Admin here.">
+            <PageTitle title="Users with Roles" subtitle="Members sign up on the website. Promote trusted members to Editor or Admin here.">
                 <input className="adm-input search" placeholder="Search name, email, reg no…" value={q} onChange={e => setQ(e.target.value)} />
                 <select className="adm-input" value={role} onChange={e => setRole(e.target.value)} style={{ maxWidth: 140 }}>
                     <option value="">All roles</option><option value="member">Members</option><option value="editor">Editors</option><option value="admin">Admins</option>
                 </select>
+                <Link to="/admin/members-master" className="adm-btn" title="View all members across the organization">👥 Members Master</Link>
                 <button className="adm-btn" disabled={!rows.length} onClick={() => downloadCsv('ieee-its-members.csv', rows)}>⬇ CSV</button>
                 <button className="adm-btn primary" onClick={() => setCreating({ name: '', email: '', password: '', role: 'editor' })}>＋ Add user</button>
             </PageTitle>
