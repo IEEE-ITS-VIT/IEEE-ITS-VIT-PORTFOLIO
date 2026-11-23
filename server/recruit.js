@@ -44,6 +44,34 @@ export function installRecruitment({ route, requireRole, audit, loadSettings }) 
     const settings = async () => (await loadSettings(['recruitment'])).recruitment
     const loadDomain = async id => domainRow(await db().first('SELECT * FROM rec_domains WHERE id = ?', [Number(id)]))
 
+    async function syncUserDomainsFromRecruitment(userId) {
+        if (!userId) return
+        const dbInst = db()
+        const selectedApps = await dbInst.all(`
+            SELECT d.title FROM rec_applications a
+            JOIN rec_domains d ON d.id = a.domain_id
+            WHERE a.user_id = ? AND a.status = 'selected'
+        `, [Number(userId)])
+        const recTitles = selectedApps.map(a => a.title)
+        const curUser = await dbInst.first('SELECT domains, email, name FROM users WHERE id = ?', [Number(userId)])
+        if (curUser) {
+            const cur = parseJson(curUser.domains, [])
+            const combined = [...new Set([...cur, ...recTitles])]
+            await dbInst.run("UPDATE users SET domains = ?, updated_at = datetime('now') WHERE id = ?", [JSON.stringify(combined), Number(userId)])
+
+            const cmsItems = await dbInst.all("SELECT id, type, data FROM content WHERE type IN ('board', 'web_team', 'advisory', 'faculty')")
+            for (const ci of cmsItems) {
+                const cd = parseJson(ci.data, {})
+                const matchEmail = curUser.email && cd.email && cd.email.trim().toLowerCase() === curUser.email.toLowerCase()
+                const matchName = curUser.name && cd.name && cd.name.trim().toLowerCase() === curUser.name.trim().toLowerCase()
+                if (matchEmail || matchName) {
+                    cd.domains = combined
+                    await dbInst.run("UPDATE content SET data = ?, updated_at = datetime('now') WHERE id = ?", [JSON.stringify(cd), ci.id])
+                }
+            }
+        }
+    }
+
     /* ── candidate side ── */
     route('GET', '/api/recruitment', async ({ user }) => {
         const s = await settings()
@@ -220,6 +248,8 @@ export function installRecruitment({ route, requireRole, audit, loadSettings }) 
         if (!sets.length) fail(400, 'Nothing to change.')
         for (const part of chunks(ids)) {
             await db().run(`UPDATE rec_applications SET ${sets.join(', ')}, updated_at = datetime('now') WHERE id IN (${part.map(() => '?').join(',')})`, [...vals, ...part])
+            const affectedUsers = await db().all(`SELECT DISTINCT user_id FROM rec_applications WHERE id IN (${part.map(() => '?').join(',')})`, part)
+            for (const au of affectedUsers) await syncUserDomainsFromRecruitment(au.user_id)
         }
         await audit(user, 'update', 'recruitment-application', ids.length === 1 ? ids[0] : `${ids.length} applications`,
             [body.status && `status → ${body.status}`, body.manualScore !== undefined && `score → ${body.manualScore}`, body.note !== undefined && 'note'].filter(Boolean).join(', '))
@@ -249,6 +279,7 @@ export function installRecruitment({ route, requireRole, audit, loadSettings }) 
                 [person.id, id, str(body.note, 2000) || 'Selected directly by admin'])
         }
         const names = (await db().all(`SELECT title FROM rec_domains WHERE id IN (${ids.map(() => '?').join(',')})`, ids)).map(d => d.title)
+        await syncUserDomainsFromRecruitment(person.id)
         await audit(user, 'select-direct', 'recruitment', person.id, `${email} selected without test for: ${names.join(', ')}`)
         return { ok: true, email, needsPassword: (await db().first('SELECT password_hash FROM users WHERE id = ?', [person.id])).password_hash === 'invited' }
     })
@@ -458,6 +489,7 @@ export function installRecruitment({ route, requireRole, audit, loadSettings }) 
                 [person.id, domainId, w.status, w.note || 'Added by admin', w.manual ?? null])
             changes.push(`added to ${titles[domainId]} (${w.status})`)
         }
+        await syncUserDomainsFromRecruitment(person.id)
         await audit(user, 'edit', 'recruitment-candidate', person.id, `${email}: ${changes.length ? changes.join('; ') : 'no changes'}`)
         return { ok: true, changes }
     })

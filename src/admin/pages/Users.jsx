@@ -6,6 +6,13 @@ import { PageTitle, Badge, Spinner, useToast, useConfirm, useLoader, fmtDate, Mo
 import Icon from '../icons'
 
 const ROLES = { member: 'Member', editor: 'Editor — manages content, events, media, orders & queries', admin: 'Admin — everything incl. users, email & audit log' }
+const DEFAULT_ADMINS = ['ieeeitsvitscore@gmail.com', 'liki123456m@gmail.com']
+const isDefaultAdmin = email => DEFAULT_ADMINS.includes(String(email || '').toLowerCase().trim())
+const isProtectedLikhith = u => {
+    const em = String(u?.email || '').toLowerCase().trim()
+    const nm = String(u?.name || '').toLowerCase().trim()
+    return em === 'liki123456m@gmail.com' || nm.includes('likhith medarametla')
+}
 
 export default function Users() {
     const { user: me } = useAuth()
@@ -18,7 +25,13 @@ export default function Users() {
     const [resetFor, setResetFor] = useState(null)
     const [pw, setPw] = useState('')
 
-    const rows = (data || []).filter(u => (!role || u.role === role) && (!q || `${u.name} ${u.email} ${u.regNo}`.toLowerCase().includes(q.toLowerCase())))
+    const isLiki = me?.email?.toLowerCase() === 'liki123456m@gmail.com'
+    const rows = (data || []).filter(u => {
+        if (!isLiki && isProtectedLikhith(u)) return false
+        if (role && u.role !== role) return false
+        if (q && !`${u.name} ${u.email} ${u.regNo}`.toLowerCase().includes(q.toLowerCase())) return false
+        return true
+    })
 
     const patch = async (u, body, msg = 'Updated') => {
         try {
@@ -61,24 +74,34 @@ export default function Users() {
                     <table className="adm-table">
                         <thead><tr><th>Name</th><th>Mobile / Reg no</th><th>Type</th><th>Role</th><th>Active</th><th>Last login</th><th /></tr></thead>
                         <tbody>
-                            {rows.map(u => (
-                                <tr key={u.id}>
-                                    <td><strong>{u.name}</strong>{u.id === me.id && <Badge tone="accent">You</Badge>}<br /><small>{u.email}</small></td>
-                                    <td>{u.mobile || '—'}<br /><small>{u.regNo || ''}</small></td>
-                                    <td><small>{u.memberType}</small></td>
-                                    <td>
-                                        <select className="adm-input" value={u.role} disabled={u.id === me.id} onChange={e => patch(u, { role: e.target.value }, `Role changed to ${e.target.value}`)}>
-                                            <option value="member">Member</option><option value="editor">Editor</option><option value="admin">Admin</option>
-                                        </select>
-                                    </td>
-                                    <td><Switch checked={u.active} onChange={v => u.id !== me.id && patch(u, { active: v }, v ? 'Activated' : 'Deactivated')} /></td>
-                                    <td className="nowrap"><small>{fmtDate(u.lastLoginAt)}</small></td>
-                                    <td className="nowrap">
-                                        <button className="adm-btn small" onClick={() => { setResetFor(u); setPw('') }}>Reset password</button>
-                                        {u.id !== me.id && <button className="adm-btn small ghost danger-text" onClick={() => remove(u)} aria-label="Delete"><Icon name="trash" size={16} /></button>}
-                                    </td>
-                                </tr>
-                            ))}
+                            {rows.map(u => {
+                                const isDefAdmin = isDefaultAdmin(u.email)
+                                const isSelf = u.id === me?.id
+                                const cannotModify = isSelf || isDefAdmin
+                                return (
+                                    <tr key={u.id}>
+                                        <td>
+                                            <strong>{u.name}</strong>
+                                            {isSelf && <Badge tone="accent">You</Badge>}
+                                            {isDefAdmin && <Badge tone="accent" style={{ marginLeft: 6 }}>Default Admin</Badge>}
+                                            <br /><small>{u.email}</small>
+                                        </td>
+                                        <td>{u.mobile || '—'}<br /><small>{u.regNo || ''}</small></td>
+                                        <td><small>{u.memberType}</small></td>
+                                        <td>
+                                            <select className="adm-input" value={u.role} disabled={cannotModify} onChange={e => patch(u, { role: e.target.value }, `Role changed to ${e.target.value}`)}>
+                                                <option value="member">Member</option><option value="editor">Editor</option><option value="admin">Admin</option>
+                                            </select>
+                                        </td>
+                                        <td><Switch checked={u.active} disabled={cannotModify} onChange={v => !cannotModify && patch(u, { active: v }, v ? 'Activated' : 'Deactivated')} /></td>
+                                        <td className="nowrap"><small>{fmtDate(u.lastLoginAt)}</small></td>
+                                        <td className="nowrap">
+                                            <button className="adm-btn small" onClick={() => { setResetFor(u); setPw('') }}>Reset password</button>
+                                            {!cannotModify && <button className="adm-btn small ghost danger-text" onClick={() => remove(u)} aria-label="Delete"><Icon name="trash" size={16} /></button>}
+                                        </td>
+                                    </tr>
+                                )
+                            })}
                         </tbody>
                     </table>
                 </div>

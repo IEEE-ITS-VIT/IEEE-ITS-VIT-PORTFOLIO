@@ -58,6 +58,7 @@ export function MediaPicker({ open, onClose, onPick, multiple }) {
     const [ikReady, setIkReady] = useState(true)
     const [selected, setSelected] = useState([])
     const [url, setUrl] = useState('')
+    const [cropUrl, setCropUrl] = useState(null)
     const [progress, setProgress] = useState(null)
     const toast = useToast()
     const fileRef = useRef()
@@ -119,9 +120,15 @@ export function MediaPicker({ open, onClose, onPick, multiple }) {
             </div>
             <div className="adm-row end" style={{ marginTop: 14 }}>
                 <span className="adm-hint">{selected.length} selected</span>
+                {selected.length === 1 && isImageUrl(selected[0]) && (
+                    <button type="button" className="adm-btn small" onClick={() => setCropUrl(selected[0])}>
+                        <Icon name="crop" size={14} /> Crop / Adjust
+                    </button>
+                )}
                 <button className="adm-btn ghost" onClick={onClose}>Cancel</button>
                 <button className="adm-btn primary" disabled={!selected.length} onClick={finish}>Use selected</button>
             </div>
+            {cropUrl && <ImageAdjust url={cropUrl} onClose={() => setCropUrl(null)} />}
         </Modal>
     )
 }
@@ -223,7 +230,12 @@ export function ImageInput({ value, onChange }) {
     const quickUpload = async f => {
         if (!f) return
         setBusy(true)
-        try { onChange((await uploadToImageKit(f)).url); toast('Image uploaded') }
+        try {
+            const item = await uploadToImageKit(f)
+            onChange(item.url)
+            toast('Image uploaded. Adjust framing if needed.')
+            setAdjust(true)
+        }
         catch (e) { toast(e.message, 'error') }
         finally { setBusy(false) }
     }
@@ -247,7 +259,7 @@ export function ImageInput({ value, onChange }) {
                 <div className="adm-row">
                     <button type="button" className="adm-btn small" onClick={() => setOpen(true)}>Library</button>
                     <button type="button" className="adm-btn small" disabled={busy} onClick={() => fileRef.current.click()}>{busy ? 'Uploading…' : 'Upload'}</button>
-                    {value && <button type="button" className="adm-btn small" onClick={() => setAdjust(true)}><Icon name="crop" size={14} /> Adjust</button>}
+                    {value && <button type="button" className="adm-btn small primary" onClick={() => setAdjust(true)}><Icon name="crop" size={14} /> Crop / Adjust</button>}
                     {value && <button type="button" className="adm-btn small ghost" onClick={removePhoto}>Remove</button>}
                 </div>
                 <input ref={fileRef} type="file" accept={ACCEPT} hidden onChange={e => { quickUpload(e.target.files[0]); e.target.value = '' }} />

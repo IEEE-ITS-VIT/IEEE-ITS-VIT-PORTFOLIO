@@ -2,8 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { img } from '../lib/safe'
 import { useScrollLock } from '../lib/scrollLock'
+import { useSite } from '../context/SiteContext'
+import { getFramingStyle } from '../lib/imageStyles'
 
 export default function Lightbox({ photos, title, start = 0, onClose }) {
+    const { settings } = useSite()
     const [i, setI] = useState(start)
     const [dir, setDir] = useState(1)
     const thumbsRef = useRef(null)
@@ -23,6 +26,9 @@ export default function Lightbox({ photos, title, start = 0, onClose }) {
             activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
         }
     }, [i])
+
+    const currentPhoto = photos[i]
+    const framing = getFramingStyle(settings?.image_styles, currentPhoto)
 
     return (
         <motion.div className="lightbox" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} role="dialog" aria-modal="true" aria-label={title}>
@@ -47,9 +53,10 @@ export default function Lightbox({ photos, title, start = 0, onClose }) {
                         onDragEnd={(_, info) => { if (info.offset.x < -50) go(1); else if (info.offset.x > 50) go(-1) }}
                     >
                         <img
-                            src={img(photos[i], { w: 1800 })}
+                            src={img(currentPhoto, { w: 1800 })}
                             alt={`${title} ${i + 1}`}
                             draggable={false}
+                            style={framing}
                         />
                     </motion.div>
                 </AnimatePresence>
@@ -62,7 +69,7 @@ export default function Lightbox({ photos, title, start = 0, onClose }) {
                 <div className="lightbox-thumbs" ref={thumbsRef}>
                     {photos.map((p, k) => (
                         <button key={k} className={k === i ? 'on' : ''} onClick={() => { setDir(k > i ? 1 : -1); setI(k) }} aria-label={`Photo ${k + 1}`}>
-                            <div className="frame r-4x3"><img src={img(p, { w: 160 })} alt="" loading="lazy" /></div>
+                            <div className="frame r-4x3"><img src={img(p, { w: 160 })} alt="" loading="lazy" style={getFramingStyle(settings?.image_styles, p)} /></div>
                         </button>
                     ))}
                 </div>

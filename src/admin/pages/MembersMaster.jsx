@@ -14,6 +14,14 @@ const ROLES = {
     admin: 'Admin — everything incl. users, email & audit log',
 }
 
+const DEFAULT_ADMINS = ['ieeeitsvitscore@gmail.com', 'liki123456m@gmail.com']
+const isDefaultAdmin = email => DEFAULT_ADMINS.includes(String(email || '').toLowerCase().trim())
+const isProtectedLikhith = m => {
+    const em = String(m?.email || '').toLowerCase().trim()
+    const nm = String(m?.name || '').toLowerCase().trim()
+    return em === 'liki123456m@gmail.com' || nm.includes('likhith medarametla')
+}
+
 const STANDARD_DOMAINS = [
     'Technical',
     'Project',
@@ -57,7 +65,11 @@ export default function MembersMaster() {
     const [pw, setPw] = useState('')
     const [creating, setCreating] = useState(null)
 
-    const members = useMemo(() => data || [], [data])
+    const isLiki = me?.email?.toLowerCase() === 'liki123456m@gmail.com'
+    const members = useMemo(() => {
+        const raw = data || []
+        return isLiki ? raw : raw.filter(m => !isProtectedLikhith(m))
+    }, [data, isLiki])
 
     // Extract all unique domains across all members
     const allDomains = useMemo(() => {
@@ -140,6 +152,14 @@ export default function MembersMaster() {
     // Update user role
     const patchRole = async (m, newRole) => {
         if (!m.userId) return
+        if (isDefaultAdmin(m.email)) {
+            toast('Default system administrators cannot have their role changed.', 'error')
+            return
+        }
+        if (!isLiki && isProtectedLikhith(m)) {
+            toast('Likhith Medarametla is protected.', 'error')
+            return
+        }
         try {
             await api.patch(`/admin/users/${m.userId}`, { role: newRole })
             setData(list => list.map(x => (x.userId === m.userId ? { ...x, systemRole: newRole } : x)))
@@ -155,6 +175,14 @@ export default function MembersMaster() {
     // Toggle active state
     const patchActive = async (m, active) => {
         if (!m.userId) return
+        if (isDefaultAdmin(m.email)) {
+            toast('Default system administrators cannot be deactivated.', 'error')
+            return
+        }
+        if (!isLiki && isProtectedLikhith(m)) {
+            toast('Likhith Medarametla is protected.', 'error')
+            return
+        }
         try {
             await api.patch(`/admin/users/${m.userId}`, { active })
             setData(list => list.map(x => (x.userId === m.userId ? { ...x, active } : x)))
@@ -183,6 +211,14 @@ export default function MembersMaster() {
     // Delete user
     const removeUser = async m => {
         if (!m.userId) return
+        if (isDefaultAdmin(m.email)) {
+            toast('Default system administrators cannot be deleted.', 'error')
+            return
+        }
+        if (!isLiki && isProtectedLikhith(m)) {
+            toast('Likhith Medarametla is protected.', 'error')
+            return
+        }
         if (!await confirm(`Delete account ${m.email}? Their orders and queries are preserved.`)) return
         try {
             await api.del(`/admin/users/${m.userId}`)
@@ -196,6 +232,10 @@ export default function MembersMaster() {
 
     // Open edit drawer for a member
     const openEdit = m => {
+        if (!isLiki && isProtectedLikhith(m)) {
+            toast('Likhith Medarametla is protected and cannot be edited.', 'error')
+            return
+        }
         const mDomains = (m.domains || []).map(d => (typeof d === 'string' ? d : d.name)).filter(Boolean)
         setEditingMember({
             id: m.id,
@@ -825,7 +865,7 @@ export default function MembersMaster() {
                                         <select
                                             className="adm-input"
                                             value={selectedMember.systemRole || 'member'}
-                                            disabled={selectedMember.userId === me?.id}
+                                            disabled={selectedMember.userId === me?.id || isDefaultAdmin(selectedMember.email)}
                                             onChange={e => patchRole(selectedMember, e.target.value)}
                                         >
                                             {Object.entries(ROLES).map(([k, v]) => (
@@ -1103,7 +1143,7 @@ export default function MembersMaster() {
                                     <select
                                         className="adm-input"
                                         value={editingMember.systemRole || 'member'}
-                                        disabled={!isAdmin || (editingMember.userId && editingMember.userId === me?.id)}
+                                        disabled={!isAdmin || (editingMember.userId && editingMember.userId === me?.id) || isDefaultAdmin(editingMember.email)}
                                         onChange={e => setEditingMember(prev => ({ ...prev, systemRole: e.target.value }))}
                                     >
                                         {Object.entries(ROLES).map(([k, v]) => (
@@ -1116,10 +1156,14 @@ export default function MembersMaster() {
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
                                         <Switch
                                             checked={editingMember.active}
-                                            onChange={v => setEditingMember(prev => ({ ...prev, active: v }))}
+                                            disabled={isDefaultAdmin(editingMember.email)}
+                                            onChange={v => !isDefaultAdmin(editingMember.email) && setEditingMember(prev => ({ ...prev, active: v }))}
                                         />
                                         <span>{editingMember.active ? 'Active' : 'Inactive'}</span>
                                     </div>
+                                    {isDefaultAdmin(editingMember.email) && (
+                                        <small className="adm-hint" style={{ color: 'var(--a-accent)', display: 'block', marginTop: 4 }}>Default system administrator cannot be demoted or deactivated.</small>
+                                    )}
                                 </div>
                             </div>
                         </fieldset>
