@@ -198,8 +198,34 @@ button { font: inherit; color: inherit; }
 @media (max-width: 860px) { .hero-bottom { grid-template-columns: 1fr; } .stats { --n: 3 !important; } .stat { padding: 16px 14px; } }
 
 /* ---------- featured event ---------- */
-.feature { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
-.feature .frame { border-radius: 0; height: 100%; min-height: 320px; aspect-ratio: auto; }
+.feature { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--surface); align-items: stretch; }
+.feature .frame {
+  border-radius: 0;
+  height: 100%;
+  min-height: 320px;
+  aspect-ratio: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.feature .frame > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain !important;
+  object-position: center center !important;
+  margin: auto;
+}
+.feature .frame:has(> img[style*="cover"]) > img,
+.feature .frame > img[style*="cover"] {
+  object-fit: cover !important;
+}
 .feature-body { padding: clamp(24px, 4vw, 44px); display: flex; flex-direction: column; gap: 18px; }
 .meta-row { display: flex; flex-wrap: wrap; gap: 8px 22px; font-family: var(--font-mono); font-size: .76rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .meta-row b { color: var(--text); font-weight: 600; }
@@ -208,7 +234,17 @@ button { font: inherit; color: inherit; }
 .countdown > div:first-child { border-left: none; }
 .countdown strong { display: block; font-family: var(--font-display); font-size: 1.8rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .countdown small { font-family: var(--font-mono); font-size: .62rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
-@media (max-width: 860px) { .feature { grid-template-columns: 1fr; } .feature .frame { min-height: 0; aspect-ratio: 16/9; } }
+@media (max-width: 860px) {
+  .feature { grid-template-columns: 1fr; }
+  .feature .frame {
+    min-height: 0;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
 
 /* ---------- spotlight banners ---------- */
 .spot { position: relative; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); }

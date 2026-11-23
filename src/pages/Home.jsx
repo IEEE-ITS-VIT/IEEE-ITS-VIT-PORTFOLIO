@@ -94,7 +94,7 @@ export default function Home() {
                 <div className="wrap">
                     <SectionHead overline={home.upcomingOverline} title={home.upcomingTitle} text={home.upcomingSubtitle} />
                     <Reveal className="feature">
-                        <Img src={feature.poster_url} alt={feature.title} ratio="16x9" width={1200} />
+                        <Img src={feature.poster_url} alt={feature.title} ratio="auto" width={1200} contain />
                         <div className="feature-body">
                             {feature.tag && <span className="label">{feature.tag}</span>}
                             <h3 className="display h-md">{feature.title}</h3>
