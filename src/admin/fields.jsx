@@ -5,6 +5,7 @@ import { img } from '../lib/safe'
 import { useSite } from '../context/SiteContext'
 import { getPath, setPath } from '../../shared/cms.js'
 import { Modal, Switch, useToast, Spinner } from './ui'
+import { getImageStyle } from '../lib/imageStyles'
 import Icon from './icons'
 
 const MAX_UPLOAD = 15 * 1024 * 1024
@@ -136,7 +137,7 @@ const ratioOf = r => r.replace('x', ' / ')
 export function ImageAdjust({ url, onClose }) {
     const { settings, refresh } = useSite()
     const toast = useToast()
-    const [st, setSt] = useState(() => ({ ...CROP_DEFAULT, ...(settings.image_styles?.[url] || {}) }))
+    const [st, setSt] = useState(() => ({ ...CROP_DEFAULT, ...(getImageStyle(settings.image_styles, url) || {}) }))
     const [shape, setShape] = useState('16x9')
     const [saving, setSaving] = useState(false)
     const drag = useRef(null)
@@ -213,6 +214,7 @@ export function ImageAdjust({ url, onClose }) {
 
 /* ---------- Single image ---------- */
 export function ImageInput({ value, onChange }) {
+    const { settings } = useSite()
     const [open, setOpen] = useState(false)
     const [adjust, setAdjust] = useState(false)
     const [busy, setBusy] = useState(false)
@@ -239,7 +241,7 @@ export function ImageInput({ value, onChange }) {
     }
     return (
         <div className="adm-image-input" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); quickUpload(e.dataTransfer.files[0]) }}>
-            <div className="adm-image-preview">{value ? <img src={thumb(value)} alt="" /> : <span>No image</span>}</div>
+            <div className="adm-image-preview">{value ? <img src={thumb(value)} alt="" style={cropStyle(getImageStyle(settings?.image_styles, value) || CROP_DEFAULT)} /> : <span>No image</span>}</div>
             <div className="adm-image-actions">
                 <input className="adm-input" value={value || ''} placeholder="Image URL" onChange={e => onChange(e.target.value)} />
                 <div className="adm-row">

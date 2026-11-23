@@ -4,6 +4,7 @@ import { api } from '../../lib/api'
 import { useSite } from '../../context/SiteContext'
 import { EVENT_FIELDS, formatEventDate, eventStatus, slugify } from '../../../shared/cms.js'
 import { FieldForm, thumb } from '../fields'
+import { getFramingStyle } from '../../lib/imageStyles'
 import { Drawer, PageTitle, Badge, Empty, Spinner, useToast, useConfirm, useLoader } from '../ui'
 import { PreviewFrame, withItem } from '../Preview'
 import Icon from '../icons'
@@ -12,7 +13,7 @@ const BLANK = { title: '', start_date: new Date().toISOString().slice(0, 10), ct
 const TONE = { upcoming: 'info', ongoing: 'ok', past: 'neutral' }
 
 export default function EventsManager() {
-    const { refresh, events: liveEvents } = useSite()
+    const { refresh, events: liveEvents, settings } = useSite()
     const toast = useToast()
     const confirm = useConfirm()
     const { data, loading, setData } = useLoader(() => api.get('/admin/events').then(r => r.items), [])
@@ -71,7 +72,7 @@ export default function EventsManager() {
                         <div key={e.id} className={`adm-timeline-item ${e.state}`}>
                             <div className="adm-timeline-date">{formatEventDate(e)}</div>
                             <div className="adm-list-row">
-                                <div className="adm-thumb">{e.poster_url ? <img src={thumb(e.poster_url)} alt="" /> : <Icon name="calendar" />}</div>
+                                <div className="adm-thumb">{e.poster_url ? <img src={thumb(e.poster_url)} alt="" style={getFramingStyle(settings?.image_styles, e.poster_url)} /> : <Icon name="calendar" />}</div>
                                 <div className="adm-list-main" onClick={() => setEditing({ ...e })}>
                                     <strong>{e.title}</strong>
                                     <small>/events/{e.slug}{e.venue ? ` · ${e.venue}` : ''}</small>

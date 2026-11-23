@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../hooks/useAuth'
 import { useSite } from '../context/SiteContext'
 import SmartLink from './SmartLink'
+import { getFramingStyle } from '../lib/imageStyles'
 import { useScrollLock } from '../lib/scrollLock'
 
 const canHover = () => window.matchMedia?.('(hover: hover) and (pointer: fine)').matches
@@ -108,7 +109,7 @@ export default function Navbar() {
                             <div className="desk">
                                 <Dropdown buttonClass="nav-user" label="Account menu" button={<>
                                     <span className={`avatar-dot${user.picture ? '' : ' logo'}`}>
-                                        {user.picture || site.logoRound ? <img src={user.picture || site.logoRound} alt="" /> : first[0]?.toUpperCase()}
+                                        {user.picture || site.logoRound ? <img src={user.picture || site.logoRound} alt="" style={user.picture ? getFramingStyle(settings.image_styles, user.picture) : undefined} /> : first[0]?.toUpperCase()}
                                     </span>{first} <span aria-hidden="true">▾</span>
                                 </>}>
                                     <Link to="/join" role="menuitem">My profile</Link>

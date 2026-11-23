@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { PageTitle, Badge, Spinner, useToast, useConfirm, useLoader, fmtDate, Modal, Drawer, Switch, downloadCsv, Empty } from '../ui'
 import { downloadXlsx } from '../../lib/xlsx'
 import { ImageInput } from '../fields'
+import { Avatar } from '../../components/Img'
 import Icon from '../icons'
 
 const ROLES = {
@@ -485,17 +486,12 @@ export default function MembersMaster() {
                                         {/* Person Name, Avatar & Email */}
                                         <td>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                                {m.avatarUrl ? (
-                                                    <img
-                                                        src={m.avatarUrl}
-                                                        alt=""
-                                                        style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover' }}
-                                                    />
-                                                ) : (
-                                                    <span className="adm-avatar" style={{ width: 34, height: 34, fontSize: '0.9rem' }}>
-                                                        {(m.name?.[0] || 'U').toUpperCase()}
-                                                    </span>
-                                                )}
+                                                <Avatar
+                                                    src={m.avatarUrl}
+                                                    alt={m.name}
+                                                    size={34}
+                                                    fallback={(m.name?.[0] || 'U').toUpperCase()}
+                                                />
                                                 <div>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                                                         <strong>{m.name || 'Unnamed'}</strong>
@@ -653,17 +649,12 @@ export default function MembersMaster() {
                     <div className="adm-form" style={{ gap: 20 }}>
                         {/* Member Header Card */}
                         <div className="adm-panel" style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                            {selectedMember.avatarUrl ? (
-                                <img
-                                    src={selectedMember.avatarUrl}
-                                    alt=""
-                                    style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover' }}
-                                />
-                            ) : (
-                                <span className="adm-avatar" style={{ width: 64, height: 64, fontSize: '1.5rem' }}>
-                                    {(selectedMember.name?.[0] || 'U').toUpperCase()}
-                                </span>
-                            )}
+                            <Avatar
+                                src={selectedMember.avatarUrl}
+                                alt={selectedMember.name}
+                                size={64}
+                                fallback={(selectedMember.name?.[0] || 'U').toUpperCase()}
+                            />
                             <div style={{ flex: 1 }}>
                                 <h3 style={{ margin: '0 0 4px' }}>{selectedMember.name}</h3>
                                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>

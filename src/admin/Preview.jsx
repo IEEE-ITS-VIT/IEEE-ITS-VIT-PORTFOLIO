@@ -95,7 +95,7 @@ export function PreviewFrame({ path = '/', patch: draft, selectMode = false, sel
             <div className="adm-preview-stage" ref={box}>
                 <iframe
                     ref={frame} name="its-preview" title="Website preview" src={src}
-                    style={{ width, height: size.h / scale, transform: `scale(${scale})`, left: Math.max(0, (size.w - width * scale) / 2) }}
+                    style={{ width, height: Math.max(size.h, 540) / scale, transform: `scale(${scale})`, left: Math.max(0, (size.w - width * scale) / 2) }}
                 />
                 {!ready && <div className="adm-preview-loading">Loading preview…</div>}
             </div>

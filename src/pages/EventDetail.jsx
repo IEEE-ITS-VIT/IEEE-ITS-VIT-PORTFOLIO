@@ -49,7 +49,16 @@ export default function EventDetail({ slug: fixedSlug }) {
             <Section id="event.detail" className="section" style={{ borderTop: 0 }}>
                 <div className="wrap ev-hero">
                     <Reveal>
-                        <Img src={pic.src(e)} alt={`${e.title} poster`} ratio="16x9" width={1400} contain={!!e.poster_url} eager fallback={pic.fallback} />
+                        <Img
+                            src={pic.src(e)}
+                            alt={`${e.title} poster`}
+                            ratio={e.poster_url ? 'auto' : '16x9'}
+                            width={1400}
+                            contain={!e.poster_url}
+                            eager
+                            fallback={pic.fallback}
+                            className="ev-poster-frame"
+                        />
                     </Reveal>
                     <Reveal delay={0.1} className="form">
                         <div className="facts">

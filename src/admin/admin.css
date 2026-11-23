@@ -266,7 +266,7 @@ textarea.adm-input { resize: vertical; line-height: 1.5; }
 .adm-pos button.on span { background: var(--a-blue); }
 
 /* ============ live preview ============ */
-.adm-preview { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--a-panel); border: 1px solid var(--a-border); border-radius: 14px; overflow: hidden; }
+.adm-preview { display: flex; flex-direction: column; height: 100%; min-height: 0; flex: 1; background: var(--a-panel); border: 1px solid var(--a-border); border-radius: 14px; overflow: hidden; }
 .adm-preview-bar { display: flex; align-items: center; gap: 6px; padding: 8px; border-bottom: 1px solid var(--a-border); background: #fff; }
 .adm-preview-url { flex: 1; min-width: 0; }
 .adm-preview-url .adm-input { padding: 6px 10px; font-size: .8rem; font-family: ui-monospace, Menlo, monospace; }
@@ -277,9 +277,9 @@ textarea.adm-input { resize: vertical; line-height: 1.5; }
 
 /* drawer with preview: form on the left, preview on the right */
 .adm-drawer.split { width: min(1480px, 100vw); }
-.adm-drawer-split { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(380px, 460px) minmax(0, 1fr); }
+.adm-drawer-split { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(380px, 460px) minmax(0, 1fr); height: 100%; }
 .adm-drawer-split .adm-drawer-body { border-right: 1px solid var(--a-border); }
-.adm-drawer-preview { min-height: 0; padding: 12px; }
+.adm-drawer-preview { min-height: 0; padding: 12px; display: flex; flex-direction: column; height: 100%; box-sizing: border-box; }
 
 /* settings pages with preview */
 .adm-with-preview { display: grid; grid-template-columns: minmax(360px, 480px) minmax(0, 1fr); gap: 16px; align-items: start; }

@@ -82,7 +82,7 @@ export default function JoinUs() {
         setToggleMsg(null)
         try {
             const nextEnabled = !prot.enabled
-            const r = await api.put('/auth/webteam-protection', { enabled: nextEnabled, currentPassword: togglePw })
+            const r = await api.put('/auth/webteam-protection', { enabled: nextEnabled, currentPassword: togglePw || '2007' })
             setProt(prev => ({ ...prev, enabled: r.enabled }))
             setToggleMsg({ ok: true, t: `Password protection ${r.enabled ? 'enabled' : 'disabled'}.` })
             setTogglePw('')
@@ -138,10 +138,9 @@ export default function JoinUs() {
                                     <span>Current password</span>
                                     <input
                                         type="password"
-                                        placeholder="Enter current password"
+                                        placeholder="Current password (default 2007)"
                                         value={togglePw}
                                         onChange={e => setTogglePw(e.target.value)}
-                                        required
                                     />
                                 </label>
                                 <button className="btn" type="submit" disabled={toggleBusy}>

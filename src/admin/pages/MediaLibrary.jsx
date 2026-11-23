@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { isPdfUrl, fileName, viewerLink } from '../../lib/pdf'
-import { uploadToImageKit, thumb, isImageUrl, fileExt } from '../fields'
+import { uploadToImageKit, thumb, isImageUrl, fileExt, ImageAdjust } from '../fields'
 import { Drawer, PageTitle, Empty, Spinner, useToast, useConfirm, useLoader, fmtDate } from '../ui'
 import Icon from '../icons'
 
@@ -33,6 +33,7 @@ function LinkRow({ label, value, hint }) {
 function MediaDetails({ media, onClose, onDelete }) {
     const [info, setInfo] = useState(null)
     const [pages, setPages] = useState(null)
+    const [adjust, setAdjust] = useState(false)
     useEffect(() => {
         let alive = true
         api.get(`/admin/media/${media.id}/usage`).then(r => alive && setInfo(r)).catch(() => alive && setInfo({ usedIn: null }))
@@ -46,8 +47,10 @@ function MediaDetails({ media, onClose, onDelete }) {
         <Drawer open title={name} onClose={onClose} wide
             footer={<>
                 <a className="adm-btn ghost" href={media.url} target="_blank" rel="noreferrer">Open original <Icon name="external" size={14} /></a>
+                {kind === 'image' && <button type="button" className="adm-btn" onClick={() => setAdjust(true)}><Icon name="crop" size={15} /> Adjust photo</button>}
                 <button className="adm-btn ghost danger-text" onClick={() => onDelete(media)}><Icon name="trash" size={16} /> Delete</button>
             </>}>
+            {adjust && <ImageAdjust url={media.url} onClose={() => setAdjust(false)} />}
             <div className="adm-media-detail">
                 {kind === 'image' && <img className="preview-img" src={`${media.url}${media.url.includes('?') ? '&' : '?'}tr=w-1400,c-at_max`} alt={name} />}
                 {kind === 'pdf' && <Suspense fallback={<Spinner />}><PdfViewer url={media.url} title={name} height="60vh" onInfo={i => setPages(i.pages)} /></Suspense>}
